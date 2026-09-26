@@ -333,9 +333,9 @@ board = w.dashboard_tab
 board.fill_running([{"name": "llama3.2:3b", "size": 2_000_000_000, "size_vram": 1_500_000_000,
                      "expiry_text": "4 min"}])
 assert len(board.rows) == 1 and board.rows[0].name == "llama3.2:3b"
-assert not board.empty_label.isVisible() and board.unload_all_btn.isEnabled()
+assert not board.empty_label.isVisibleTo(board) and board.unload_all_btn.isEnabled()
 board.fill_running([])
-assert not board.rows and board.empty_label.isVisible() and not board.unload_all_btn.isEnabled()
+assert not board.rows and board.empty_label.isVisibleTo(board) and not board.unload_all_btn.isEnabled()
 
 board.refresh()
 loop = QEventLoop()
