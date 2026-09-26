@@ -18,6 +18,11 @@ except Exception:
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+# Rediriger Path.home() avant le premier import applicatif, sur Windows et Unix.
+_profile = tempfile.TemporaryDirectory(prefix="ia_manager_smoke_profile_")
+os.environ["HOME"] = _profile.name
+os.environ["USERPROFILE"] = _profile.name
+
 errors = []
 
 

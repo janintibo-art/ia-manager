@@ -1,114 +1,34 @@
 # IA Manager
 
-**Application desktop Windows pour gérer et exécuter plusieurs IA locales**
+Application de bureau Python/PyQt6, principalement destinée à Windows, pour utiliser et gérer des IA locales et des connexions API.
 
-Gérateur complet pour utiliser Ollama, LM Studio, GPT4All et des modèles Hugging Face directement sur votre PC, avec analyse système automatique et allocation intelligente RAM/VRAM.
+## Fonctions
 
-## 🎯 Fonctionnalités
+- Chat en continu, commandes rapides, pièces jointes et recherche web facultative.
+- Ollama, LM Studio et serveurs compatibles OpenAI ; connexions OpenAI et Anthropic.
+- Catalogue, recherche Hugging Face/GGUF, téléchargement via Ollama.
+- Projets, consignes, discussions sauvegardées, recherche et exports PDF/Word/Markdown.
+- Comparateur, tableau de bord, mesures et estimations de vitesse.
+- Tâches planifiées pendant que l'application reste ouverte.
+- Outils GitHub et commandes Termux pour envoyer les mises à jour.
+- Atelier **Obliteratus** : accès web, installation Python séparée et lancement local avec journal.
 
-- **💬 Chat** : Discuter en temps réel avec l'IA sélectionnée
-- **📦 Modèles** : Télécharger/gérer une large sélection d'IA (Llama, Mistral, CodeLlama, Falcon, Orca...)
-- **⚙️ Configuration** : Analyse CPU/GPU/RAM avec recommandations automatiques et slider allocation VRAM/RAM
+## Utilisation
 
-## 📋 Prérequis
+Télécharger l'exécutable depuis les [releases](https://github.com/janintibo-art/ia-manager/releases). Installer et lancer Ollama séparément pour ses modèles locaux ; les autres moteurs se configurent dans **Connexions**.
 
-- **Python 3.11+**
-- **Windows 10+** (ou Linux/macOS)
-- **4GB RAM minimum** (8GB+ recommandé)
-- **[Ollama](https://ollama.ai)** installé et lancé en arrière-plan (pour la plupart des modèles)
+Pour exécuter les sources : Python 3.11+, dépendances de `requirements.txt`, puis `python main.py`. L'application utilise le dossier `~/.ia_manager` pour sa configuration et le dossier de projets choisi dans ses réglages.
 
-## 🚀 Installation
+## Obliteratus
 
-### Option 1 : Exécutable Windows (Recommandé)
+L'onglet ouvre la version web officielle sans installation locale. Pour utiliser le mode local sur le PC, choisir un Python 3.10+ installé, cliquer sur **Installer / réparer**, puis **Lancer en local**. Attendre l'annonce du serveur dans le journal avant **Ouvrir l'interface locale**.
 
-Téléchargez `ia_manager.exe` depuis les [Releases GitHub](https://github.com/janintibo-art/ia-manager/releases) et lancez-le.
+Les dépendances lourdes sont téléchargées dans `~/.ia_manager/tools/obliteratus/.venv`, séparément de l'EXE. Le lancement est limité à `127.0.0.1`, avec télémétrie désactivée pour le processus local. Une machine adaptée au modèle et un environnement PyTorch compatible restent nécessaires. Android/Termux n'est pas un environnement pris en charge par Obliteratus.
 
-### Option 2 : Depuis les sources
+Ce module lance l'outil officiel ; il ne transforme pas directement les modèles Ollama/GGUF et n'importe pas automatiquement les exports. Voir [la documentation officielle](https://github.com/elder-plinius/OBLITERATUS) et [l'analyse v22](ANALYSE_v22.md) pour le détail et les limites de validation.
 
-```bash
-git clone https://github.com/janintibo-art/ia-manager.git
-cd ia_manager
-pip install -r requirements.txt
-python main.py
-```
+## Vérification et compilation
 
-## 🎨 Interface
+GitHub Actions exécute les tests de régression, le test de démarrage hors écran puis PyInstaller, avant de publier l'exécutable. Les tests utilisent un profil temporaire.
 
-### Onglet Chat
-- Sélectionner le modèle d'IA
-- Converser naturellement
-- Historique complet dans la session
-
-### Onglet Modèles
-- Liste complète des modèles disponibles (20+)
-- Téléchargement en un clic
-- Gestion des modèles (suppression, refresh)
-
-### Onglet Configuration
-- Analyse automatique du PC
-- Recommandations d'IA basées sur vos specs
-- Sliders pour répartition VRAM/RAM
-- Choix entre Rapidité, Équilibré, Qualité
-
-## 📦 IA Supportées
-
-### Ollama (Local, Rapide)
-- Llama 2 (7B-70B)
-- Mistral 7B
-- Neural Chat
-- CodeLlama (Code)
-- Orca Mini
-
-### Hugging Face (Custom Models)
-- Falcon 7B-180B
-- Tous les modèles supportés
-
-### GPT4All (Léger)
-- Falcon
-- Orca
-- MPT
-
-## 🔧 Configuration
-
-L'application crée automatiquement :
-- `~/.ia_manager/models/` — Stockage des modèles
-- `~/.ia_manager/config/` — Configuration utilisateur
-
-## 📊 Architecture
-
-```
-ia_manager/
-├── main.py              # Point d'entrée
-├── src/
-│   ├── ui/              # Interface PyQt6
-│   │   └── tabs/        # Chat, Modèles, Setup
-│   ├── backend/         # Logique métier
-│   │   ├── ai_manager.py
-│   │   ├── system_analyzer.py
-│   │   └── allocation.py
-│   └── api/             # Intégrations
-└── requirements.txt     # Dépendances
-```
-
-## 🛠️ Développement
-
-```bash
-# Installer les dépendances de développement
-pip install -r requirements.txt
-pip install PyInstaller
-
-# Générer l'exe Windows
-pyinstaller --onefile --windowed main.py
-```
-
-## 📝 Licence
-
-Libre et gratuit.
-
-## 🤝 Contribution
-
-Contributions bienvenues ! Créez une issue pour signaler des bugs ou proposer des fonctionnalités.
-
----
-
-**Créé par** [@janintibo-art](https://github.com/janintibo-art)
+L'[analyse v22](ANALYSE_v22.md) décrit les corrections, les problèmes restants et les prochaines améliorations proposées.

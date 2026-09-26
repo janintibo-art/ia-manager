@@ -119,12 +119,27 @@ def build_zip(blocks: List[Dict], dest: str, root_folder: str = "") -> Path:
 def write_to_folder(blocks: List[Dict], folder: str) -> List[Path]:
     """Écrit chaque bloc directement dans le dossier du dépôt (pour « Appliquer au dépôt »).
     Les chemins sont déjà nettoyés par _clean_path (pas de .. ni de racine absolue)."""
-    base = Path(folder)
-    written = []
+    base = Path(folder).resolve()
+    pending = []
     for b in assign_filenames(blocks):
-        target = base / b["filename"]
+        name = b["filename"].replace("\\", "/")
+        parts = name.split("/")
+        if (name.startswith("/") or ":" in name or ".." in parts
+                or any(part.lower() == ".git" for part in parts)):
+            raise OSError(f"Chemin de fichier interdit : {name}")
+        target = (base / name).resolve()
+        if not target.is_relative_to(base) or target == base:
+            raise OSError(f"Le fichier sort du dossier du projet : {name}")
+        if any(part.lower() == ".git" for part in target.relative_to(base).parts):
+            raise OSError(f"Chemin interne Git interdit : {name}")
+        if target.exists() and not target.is_file():
+            raise OSError(f"Ce chemin n'est pas un fichier : {name}")
+        pending.append((target, b["code"]))
+    # Valider tout le lot avant la première écriture (y compris les liens symboliques).
+    written = []
+    for target, code in pending:
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(b["code"] + "\n", encoding="utf-8")
+        target.write_text(code + "\n", encoding="utf-8")
         written.append(target)
     return written
 

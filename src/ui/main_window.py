@@ -19,6 +19,7 @@ from src.ui.tabs.connections_tab import ConnectionsTab
 from src.ui.tabs.dashboard_tab import DashboardTab
 from src.ui.tabs.github_tab import GithubTab
 from src.ui.tabs.models_tab import ModelsTab
+from src.ui.tabs.obliteratus_tab import ObliteratusTab
 from src.ui.tabs.projects_tab import ProjectsTab, get_project_manager
 from src.ui.tabs.search_tab import SearchTab
 from src.ui.tabs.setup_tab import SetupTab
@@ -53,6 +54,7 @@ class MainWindow(QMainWindow):
         self.dashboard_tab = DashboardTab()
         self.comparator_tab = ComparatorTab()
         self.bench_tab = BenchTab()
+        self.obliteratus_tab = ObliteratusTab()
 
         self.tabs.addTab(self.setup_tab, "⚙️ Analyse")
         self.tabs.addTab(self.models_tab, "📦 Modèles")
@@ -65,6 +67,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.tasks_tab, "⏰ Tâches")
         self.tabs.addTab(self.connections_tab, "🔌 Connexions")
         self.tabs.addTab(self.github_tab, "🐙 GitHub")
+        self.tabs.addTab(self.obliteratus_tab, "🧪 Obliteratus")
 
         # Modèles installés ou supprimés : tous les onglets se mettent à jour
         self.setup_tab.models_changed.connect(self.on_models_changed)
@@ -214,6 +217,7 @@ class MainWindow(QMainWindow):
                             "Vos tâches planifiées continuent. Clic droit sur l'icône pour quitter.")
                 self.tray_hint_shown = True
             return
+        self.obliteratus_tab.shutdown()
         if self.tray:
             self.tray.hide()
         event.accept()
@@ -231,7 +235,7 @@ class MainWindow(QMainWindow):
         self.start_next_task()
 
     def start_next_task(self):
-        if self.task_worker is not None and self.task_worker.isRunning():
+        if self.task_worker is not None:
             return
         if not self.task_queue:
             return
@@ -245,6 +249,7 @@ class MainWindow(QMainWindow):
             system = (system + "\n\n" + code_tools.CODE_MODE_INSTRUCTIONS).strip()
         self.task_worker = ChatWorker(task["model"], [{"role": "user", "content": task["prompt"]}], system)
         self.task_worker.answered.connect(self.on_task_answer)
+        self.task_worker.finished.connect(self.on_task_finished)
         self.task_worker.start()
 
     def on_task_answer(self, answer: str):
@@ -265,4 +270,8 @@ class MainWindow(QMainWindow):
         self.current_task = None
         self.tasks_tab.on_task_finished(tid, status)
         self.notify(f"Tâche « {task.get('name', '')} »", status)
+
+    def on_task_finished(self):
+        # answered peut arriver avant la fin réelle du QThread.
+        self.task_worker = None
         self.start_next_task()

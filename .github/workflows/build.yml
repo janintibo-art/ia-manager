@@ -32,6 +32,8 @@ jobs:
           PYTHONIOENCODING: utf-8
         run: |
           pip show PyQt6 PyQt6-Qt6
+          python -m unittest discover -s tests -p "test_*.py" -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tests/smoke_test.py
 
       - name: Build EXE

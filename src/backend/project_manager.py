@@ -13,6 +13,7 @@ import json
 import re
 import shutil
 import unicodedata
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -208,7 +209,7 @@ class ProjectManager:
 
     def save_conversation(self, pid: str, conv: Dict) -> str:
         """Crée ou met à jour une discussion ; renvoie son identifiant"""
-        cid = conv.get("id") or f"{datetime.now():%Y%m%d_%H%M%S}"
+        cid = conv.get("id") or f"{datetime.now():%Y%m%d_%H%M%S}_{uuid.uuid4().hex[:12]}"
         data = {
             "title": conv.get("title") or "Discussion",
             "model": conv.get("model", ""),
