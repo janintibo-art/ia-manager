@@ -41,7 +41,10 @@ def format_expiry(expires_at: str) -> str:
 
 
 def snapshot(ai_manager: AIManager) -> Dict:
-    """RAM/VRAM du PC et IA actuellement chargées en mémoire (à appeler hors du fil principal)."""
+    """RAM/VRAM du PC et IA actuellement chargées en mémoire (à appeler hors du fil principal).
+    lmstudio = None si LM Studio n'est pas lancé, sinon la liste de ses modèles."""
+    from src.backend import lmstudio
+
     mem = psutil.virtual_memory()
     up = ai_manager.is_ollama_running()
     running = ai_manager.list_running() if up else []
@@ -53,4 +56,5 @@ def snapshot(ai_manager: AIManager) -> Dict:
         "ram_total_gb": mem.total / (1024 ** 3),
         "gpu": gpu_usage(),
         "running": running,
+        "lmstudio": lmstudio.list_models(),
     }

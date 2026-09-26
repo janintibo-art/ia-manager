@@ -72,6 +72,7 @@ class MainWindow(QMainWindow):
         self.setup_tab.analysis_done.connect(self.search_tab.set_system_info)
         self.setup_tab.analysis_done.connect(self.chat_tab.set_system_info)
         self.search_tab.models_changed.connect(self.on_models_changed)
+        self.dashboard_tab.models_changed.connect(self.on_models_changed)
         self.setup_tab.show_model.connect(self.open_model)
 
         # Projets <-> Chat

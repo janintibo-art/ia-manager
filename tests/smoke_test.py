@@ -361,6 +361,79 @@ app.processEvents()
 assert board.ram_meter.value_label.text() != "—", "RAM lue"
 print("Onglet Tableau de bord OK :", board.hint.text() or "Ollama détecté")
 
+# LM Studio simulé : détection, modèles dans le Chat, ligne au tableau de bord, déchargement
+import json as _j  # noqa: E402
+import threading as _th  # noqa: E402
+from http.server import BaseHTTPRequestHandler as _BH, ThreadingHTTPServer as _TS  # noqa: E402
+
+from src.backend import lmstudio  # noqa: E402
+
+LM_UNLOADED = []
+
+
+class FakeLMStudio(_BH):
+    def log_message(self, *a):
+        pass
+
+    def _send(self, obj):
+        b = _j.dumps(obj).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(b)))
+        self.end_headers()
+        self.wfile.write(b)
+
+    def do_GET(self):
+        self._send({"models": [
+            {"type": "llm", "key": "google/gemma-test", "display_name": "Gemma test",
+             "quantization": {"name": "Q4_K_M", "bits_per_weight": 4}, "size_bytes": 5_000_000_000,
+             "params_string": "4B", "max_context_length": 32768, "format": "gguf",
+             "loaded_instances": [{"id": "google/gemma-test", "config": {"context_length": 8192}}]},
+            {"type": "embedding", "key": "nomic-embed", "loaded_instances": []}]})
+
+    def do_POST(self):
+        body = _j.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        LM_UNLOADED.append(body.get("instance_id"))
+        self._send(body)
+
+
+lm_server = _TS(("127.0.0.1", 0), FakeLMStudio)
+_th.Thread(target=lm_server.serve_forever, daemon=True).start()
+lmstudio.BASE_URL = f"http://127.0.0.1:{lm_server.server_address[1]}"
+
+
+def wait_board():
+    lp = QEventLoop()
+    board.worker.done.connect(lp.quit)
+    QTimer.singleShot(15000, lp.quit)
+    lp.exec()
+    app.processEvents()
+
+
+if board.worker is not None and board.worker.isRunning():
+    wait_board()
+board.refresh()
+wait_board()
+assert board.lmstudio_up, board.hint.text()
+lm_rows = [r for r in board.rows if r.source == "lmstudio"]
+assert len(lm_rows) == 1 and lm_rows[0].name == "google/gemma-test", [(r.source, r.name) for r in board.rows]
+lm_provider = lmstudio.find_provider()
+assert lm_provider and lm_provider["models"] == ["google/gemma-test"], lm_provider
+lm_ref = pv.make_ref(lm_provider["id"], "google/gemma-test")
+assert chat.model_select.findData(lm_ref) >= 0, "modèle LM Studio dans le Chat"
+board.run_unload([("lmstudio", "google/gemma-test")])
+lp = QEventLoop()
+board.unload_worker.done.connect(lp.quit)
+QTimer.singleShot(15000, lp.quit)
+lp.exec()
+app.processEvents()
+assert LM_UNLOADED == ["google/gemma-test"], LM_UNLOADED
+if board.worker is not None and board.worker.isRunning():
+    wait_board()
+lm_server.shutdown()
+lmstudio.BASE_URL = "http://127.0.0.1:9"
+print("LM Studio OK :", board.hint.text())
+
 # ------------------------------------------------------------- Recherche d'IA
 search = w.search_tab
 search.request_id += 1
