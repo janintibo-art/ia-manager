@@ -40,3 +40,7 @@ Le Chat propose un aperçu des différences avant d'appliquer du code, une sauve
 ## Mise à jour v24
 
 Stop réseau annulable, documents chargés en arrière-plan et nouvel **Espace de travail** : mémoire documentaire par projet, profils, file des générations locales, déchargement Ollama et carnet manuel des essais Obliteratus. Voir [le guide v24](MISE_A_JOUR_v24.md) pour les étapes et les limites.
+
+## Mise à jour v27
+
+Protection du contexte : jauge colorée, avertissement à 75/90 % et blocage préventif des historiques trop longs. Voir [le guide v27](MISE_A_JOUR_v27.md).

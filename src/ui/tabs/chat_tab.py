@@ -19,7 +19,7 @@ from src.backend import code_tools, providers, settings, change_review
 from src.backend import github_tools as gt
 from src.backend import quick_commands as qc
 from src.backend import model_registry as reg
-from src.backend import web_tools, project_memory
+from src.backend import web_tools, project_memory, model_options
 from src.backend.ai_manager import AIManager
 from src.backend.project_manager import now_iso, slugify
 from src.ui import style
@@ -505,8 +505,26 @@ class ChatTab(QWidget):
     def estimate_context(self):
         chars = sum(len(m.get("content", "")) for m in self.messages)
         tokens = max(0, chars // 4)
-        self.context_label.setText(f"Contexte estimé : {tokens:,} tokens · {chars:,} caractères".replace(",", " "))
-        self.compact_btn.setEnabled(len(self.messages) >= 8)
+        ref = self.current_ref()
+        limit = 8192
+        if ref:
+            try:
+                opts = model_options.get_options(ref)
+                limit = int(opts.get("num_ctx") or model_options.MODE_CTX.get(opts.get("mode"), 8192) or 8192)
+            except (TypeError, ValueError):
+                pass
+        ratio = tokens / max(1, limit)
+        if ratio >= .9:
+            prefix = "⚠️ Contexte presque plein"
+            self.context_label.setStyleSheet("color: #ffb454; font-weight: 600;")
+        elif ratio >= .75:
+            prefix = "ℹ️ Contexte chargé"
+            self.context_label.setStyleSheet("color: #8ab4f8;")
+        else:
+            prefix = "Contexte estimé"
+            self.context_label.setStyleSheet("")
+        self.context_label.setText(f"{prefix} : {tokens:,}/{limit:,} tokens · {chars:,} caractères".replace(",", " "))
+        self.compact_btn.setEnabled(len(self.messages) >= 8 or ratio >= .75)
         return tokens
 
     def compact_history(self):
@@ -835,6 +853,9 @@ class ChatTab(QWidget):
                                                    "puis sélectionnez-la.")
             return
         if not text and not self.pending:
+            return
+        if self.estimate_context() >= 8192 and len(self.messages) >= 8:
+            self.status.setText("⚠️ Historique volumineux : utilisez « Réduire l’historique » avant d’envoyer.")
             return
         if self.worker is not None and self.worker.isRunning():
             return
