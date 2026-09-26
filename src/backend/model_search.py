@@ -4,6 +4,7 @@
 import hashlib
 import re
 import time
+import json
 from datetime import datetime
 from typing import Dict, List, Optional
 
@@ -24,6 +25,15 @@ _DETAIL_TTL = 60
 
 def clear_detail_cache():
     _DETAIL_CACHE.clear()
+
+
+def export_details(path: str, details: Dict) -> str:
+    """Exporte une fiche sans clé, jeton ou contenu sensible."""
+    safe = {k: v for k, v in details.items() if k not in {"readme"}}
+    target = __import__("pathlib").Path(path).expanduser()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(safe, ensure_ascii=False, indent=2), encoding="utf-8")
+    return str(target)
 
 
 def cached_details(source: str, repo: str, timeout: int = 20) -> Dict:

@@ -167,6 +167,9 @@ class SearchTab(QWidget):
         self.favorite_btn = QPushButton("☆ Ajouter aux favoris")
         self.favorite_btn.clicked.connect(self.toggle_favorite)
         btns.addWidget(self.favorite_btn)
+        self.export_detail_btn = QPushButton("📄 Exporter la fiche")
+        self.export_detail_btn.clicked.connect(self.export_details)
+        btns.addWidget(self.export_detail_btn)
         btns.addStretch()
         dl.addLayout(btns)
         splitter.addWidget(detail_card)
@@ -345,6 +348,18 @@ class SearchTab(QWidget):
         state = model_favorites.toggle(self.current_source_key(), model_id, model_id.split("/")[-1])
         self.favorite_btn.setText("★ Retirer des favoris" if state else "☆ Ajouter aux favoris")
         self.search() if self.results else None
+
+    def export_details(self):
+        if not self.details:
+            return
+        name = re.sub(r"[^a-zA-Z0-9._-]+", "-", self.details.get("id", "modele")).strip("-")
+        path, _ = QFileDialog.getSaveFileName(self, "Exporter la fiche modèle", f"{name}.json", "JSON (*.json)")
+        if path:
+            try:
+                ms.export_details(path, self.details)
+                self.dl_status.setText("✅ Fiche modèle exportée sans secrets.")
+            except Exception as error:
+                self.dl_status.setText(f"❌ Export impossible : {error}")
         self.detail_worker = FunctionWorker(ms.cached_details, self.current_source_key(), repo)
         self.detail_worker.done.connect(lambda ok, res, r=rid, rp=repo: self.on_details(r, rp, ok, res))
         self.detail_worker.start()
@@ -450,6 +465,7 @@ class SearchTab(QWidget):
         item = self.result_list.currentItem()
         favorite = bool(item and model_favorites.is_favorite(self.current_source_key(), item.data(Qt.ItemDataRole.UserRole)))
         self.favorite_btn.setText("★ Retirer des favoris" if favorite else "☆ Ajouter aux favoris")
+        self.export_detail_btn.setEnabled(self.details is not None)
 
     def open_on_hf(self):
         item = self.result_list.currentItem()

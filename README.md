@@ -112,3 +112,7 @@ Les favoris peuvent être exportés et importés en JSON, sans secrets. Ils sont
 ## Mise à jour v44
 
 Les fiches détaillées des modèles sont conservées 60 secondes pour accélérer la navigation et limiter les requêtes réseau. Le vidage des caches IA force une actualisation complète. Voir [le guide v44](MISE_A_JOUR_v44.md).
+
+## Mise à jour v45
+
+Une fiche Hugging Face, GitHub, ModelScope ou Civitai peut être exportée en JSON, sans README volumineux ni secrets. Voir [le guide v45](MISE_A_JOUR_v45.md).
