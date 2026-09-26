@@ -43,7 +43,8 @@ def export_pdf(data: Dict, dest: str) -> Path:
     printer.setPageSize(QPageSize(QPageSize.PageSizeId.A4))
     printer.setPageMargins(QMarginsF(18, 18, 18, 18), QPageLayout.Unit.Millimeter)
     # Qt calcule seul la pagination à partir de la taille de page de l'imprimante.
-    doc.print_(printer)
+    # PyQt6 a renommé QTextDocument::print() (pas de print_ comme en PyQt5).
+    doc.print(printer)
     return dest_path
 
 
