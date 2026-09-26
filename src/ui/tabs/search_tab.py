@@ -18,7 +18,7 @@ from src.backend import providers as pv
 from src.backend.ai_manager import AIManager
 from src.backend.system_analyzer import SystemAnalyzer
 from src.ui import style
-from src.ui.workers import DownloadWorker, FunctionWorker
+from src.ui.workers import DownloadWorker, FileDownloadWorker, FunctionWorker
 
 
 def gb(size: int) -> str:
@@ -39,6 +39,7 @@ class SearchTab(QWidget):
         self.detail_worker: Optional[FunctionWorker] = None
         self.dl_worker: Optional[DownloadWorker] = None
         self.github_worker: Optional[FunctionWorker] = None
+        self.github_file_worker: Optional[FileDownloadWorker] = None
         self.request_id = 0
         self.detail_request = 0
         try:
@@ -129,7 +130,7 @@ class SearchTab(QWidget):
         dl.addWidget(self.quant_list, 2)
 
         self.progress = QProgressBar()
-        self.progress.setRange(0, 0)
+        self.progress.setRange(0, 100)
         self.progress.setTextVisible(False)
         self.progress.setVisible(False)
         dl.addWidget(self.progress)
@@ -137,6 +138,10 @@ class SearchTab(QWidget):
         self.dl_status.setObjectName("Status")
         self.dl_status.setWordWrap(True)
         dl.addWidget(self.dl_status)
+        self.cancel_btn = QPushButton("⏹ Annuler le téléchargement")
+        self.cancel_btn.setVisible(False)
+        self.cancel_btn.clicked.connect(self.cancel_download)
+        dl.addWidget(self.cancel_btn)
 
         btns = QHBoxLayout()
         self.download_btn = QPushButton("⬇ Télécharger cette version")
@@ -335,7 +340,8 @@ class SearchTab(QWidget):
         return next((x for x in self.details["quants"] if x["quant"] == q), None)
 
     def update_buttons(self):
-        busy = self.dl_worker is not None and self.dl_worker.isRunning()
+        busy = any(worker is not None and worker.isRunning()
+                   for worker in (self.dl_worker, self.github_worker, self.github_file_worker))
         q = self.selected_quant()
         self.download_btn.setEnabled(bool(q) and not q["split"] and not busy)
         self.hf_btn.setEnabled(self.details is not None or self.result_list.currentItem() is not None)
@@ -384,14 +390,37 @@ class SearchTab(QWidget):
         if not pv.valid_model_name(name):
             name = "github-modele"
         self.progress.setVisible(True)
+        self.progress.setRange(0, 100)
+        self.cancel_btn.setVisible(True)
         self.dl_status.setText(f"⏳ Téléchargement puis installation de {asset.get('asset','')}…")
-        self.github_worker = FunctionWorker(self.install_github_asset, self.details["id"], asset, name)
-        self.github_worker.done.connect(lambda ok, result, n=name: self.on_downloaded(ok, str(result) if not ok else "", n))
+        self.github_file_worker = FileDownloadWorker(ms.download_github_gguf, self.details["id"], asset)
+        self.github_file_worker.progress.connect(self.on_file_progress)
+        self.github_file_worker.finished_ok.connect(lambda ok, result, n=name, a=asset:
+                                                    self.on_github_file(ok, result, n, a))
+        self.github_file_worker.start()
+
+    def on_file_progress(self, done: int, total: int):
+        if total:
+            self.progress.setValue(min(100, int(done * 100 / total)))
+            self.dl_status.setText(f"⏳ Téléchargement : {gb(done)} / {gb(total)}")
+
+    def on_github_file(self, ok: bool, result: str, name: str, _asset: Dict):
+        self.github_file_worker = None
+        if not ok:
+            self.progress.setVisible(False); self.cancel_btn.setVisible(False)
+            self.dl_status.setText(f"❌ {result}")
+            self.update_buttons()
+            return
+        self.dl_status.setText("⏳ Import du fichier dans Ollama…")
+        self.github_worker = FunctionWorker(pv.create_from_gguf, name, result)
+        self.github_worker.done.connect(lambda done, message, n=name: self.on_downloaded(
+            done, str(message) if not done else "", n))
         self.github_worker.start()
 
-    def install_github_asset(self, repo: str, asset: Dict, name: str):
-        path = ms.download_github_gguf(repo, asset)
-        return pv.create_from_gguf(name, path)
+    def cancel_download(self):
+        if self.github_file_worker:
+            self.github_file_worker.stop()
+            self.dl_status.setText("⏹ Annulation demandée… le fichier partiel sera conservé pour reprendre.")
 
     def download_ollama_name(self):
         name = self.ollama_name.text().strip()
@@ -407,6 +436,7 @@ class SearchTab(QWidget):
 
     def on_downloaded(self, ok: bool, error: str, name: str):
         self.progress.setVisible(False)
+        self.cancel_btn.setVisible(False)
         if ok:
             self.dl_status.setText(f"✅ {name} est installé : il est disponible dans le Chat.")
             self.models_changed.emit()

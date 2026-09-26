@@ -36,6 +36,28 @@ class DownloadWorker(SafeThread):
             self.finished_ok.emit(False, str(e))
 
 
+class FileDownloadWorker(SafeThread):
+    """Télécharge un fichier avec progression, reprise et annulation."""
+    progress = pyqtSignal(int, int)
+    finished_ok = pyqtSignal(bool, str)
+
+    def __init__(self, downloader, *args):
+        super().__init__()
+        self.downloader, self.args = downloader, args
+        self._stop = False
+
+    def stop(self):
+        self._stop = True
+
+    def run(self):
+        try:
+            result = self.downloader(*self.args, on_progress=lambda done, total: self.progress.emit(done, total),
+                                     should_stop=lambda: self._stop)
+            self.finished_ok.emit(True, result)
+        except Exception as error:
+            self.finished_ok.emit(False, str(error))
+
+
 class ChatWorker(SafeThread):
     """Interroge l'IA (locale ou distante) avec l'historique et les consignes du projet"""
     answered = pyqtSignal(str)

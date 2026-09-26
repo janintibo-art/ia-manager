@@ -64,3 +64,7 @@ La configuration peut être exportée puis restaurée depuis **Connexions**. La 
 ## Mise à jour v32
 
 La recherche propose désormais **GitHub (GGUF)**, avec lecture des releases et installation directe dans Ollama. Hugging Face, Ollama et l'import de fichiers GGUF locaux restent disponibles. Voir [le guide v32](MISE_A_JOUR_v32.md).
+
+## Mise à jour v33
+
+Les téléchargements GitHub affichent leur progression, peuvent être annulés et reprennent après interruption. Les fichiers partiels sont contrôlés par SHA-256 quand GitHub fournit cette information. Voir [le guide v33](MISE_A_JOUR_v33.md).

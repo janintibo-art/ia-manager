@@ -1,6 +1,7 @@
 """Moteur de recherche d'IA : explore les modèles GGUF publiés sur Hugging Face
 (plus de 100 000 modèles), puis les télécharge dans Ollama (hf.co/depot:quantification)."""
 
+import hashlib
 import re
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -109,30 +110,55 @@ def github_details(repo: str, timeout: int = 20) -> Dict:
                 assets.append({"quant": quant_of(name) or "GGUF", "size": int(asset.get("size") or 0),
                                "files": [name], "split": bool(SPLIT_RE.search(name)),
                                "download_url": asset.get("browser_download_url", ""),
-                               "asset": name, "release": release.get("tag_name", "")})
+                               "asset": name, "release": release.get("tag_name", ""),
+                               "digest": asset.get("digest", "")})
     return {"id": repo, "author": repo.split("/")[0], "license": "", "base_model": "",
             "architecture": "", "context": 0, "params": 0, "languages": [], "pipeline": "github",
             "downloads": 0, "likes": 0, "updated": "", "gated": False, "readme": "",
             "quants": assets, "html_url": f"{GITHUB_SITE}/{repo}"}
 
 
-def download_github_gguf(repo: str, asset: Dict, timeout: int = 60) -> str:
+def download_github_gguf(repo: str, asset: Dict, timeout: int = 60, on_progress=None, should_stop=None) -> str:
     """Télécharge un asset GGUF dans le cache local et renvoie son chemin."""
     from pathlib import Path
     target_dir = Path.home() / ".ia_manager" / "models" / "downloads"
     target_dir.mkdir(parents=True, exist_ok=True)
     safe = re.sub(r"[^A-Za-z0-9._-]+", "_", f"{repo.replace('/', '_')}_{asset['asset']}")
     target = target_dir / safe
-    if not target.exists() or target.stat().st_size != int(asset.get("size") or 0):
-        with requests.get(asset["download_url"], stream=True, timeout=timeout,
-                          headers={"Accept": "application/octet-stream"}) as r:
+    expected = int(asset.get("size") or 0)
+    part = target.with_suffix(target.suffix + ".part")
+    current = part.stat().st_size if part.exists() else 0
+    if target.exists() and (not expected or target.stat().st_size == expected):
+        return str(target)
+    headers = {"Accept": "application/octet-stream"}
+    if current:
+        headers["Range"] = f"bytes={current}-"
+    with requests.get(asset["download_url"], stream=True, timeout=timeout, headers=headers) as r:
             r.raise_for_status()
-            temp = target.with_suffix(target.suffix + ".part")
-            with temp.open("wb") as out:
+            # Certains serveurs ignorent Range et renvoient 200 : on repart alors proprement.
+            append = current > 0 and r.status_code == 206
+            if not append:
+                current = 0
+            total = current + int(r.headers.get("Content-Length") or expected or 0)
+            mode = "ab" if append else "wb"
+            with part.open(mode) as out:
+                done = current
                 for chunk in r.iter_content(chunk_size=1024 * 1024):
+                    if should_stop and should_stop():
+                        raise InterruptedError("Téléchargement annulé. Relancez pour reprendre.")
                     if chunk:
                         out.write(chunk)
-            temp.replace(target)
+                        done += len(chunk)
+                        if on_progress:
+                            on_progress(done, total)
+            if expected and part.stat().st_size != expected:
+                raise RuntimeError(f"Téléchargement incomplet : {part.stat().st_size} / {expected} octets.")
+            digest = str(asset.get("digest") or "")
+            if digest.startswith("sha256:"):
+                checksum = hashlib.sha256(part.read_bytes()).hexdigest()
+                if checksum.lower() != digest.split(":", 1)[1].lower():
+                    raise RuntimeError("Vérification SHA-256 échouée : fichier supprimé.")
+            part.replace(target)
     return str(target)
 
 

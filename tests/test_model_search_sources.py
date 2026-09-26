@@ -25,6 +25,27 @@ class ModelSourceTests(unittest.TestCase):
         self.assertEqual(len(details["quants"]), 1)
         self.assertEqual(details["quants"][0]["quant"], "Q4_K_M")
 
+    @patch("src.backend.model_search.requests.get")
+    def test_download_resumes_partial_file(self, get):
+        import tempfile
+        from pathlib import Path
+        class Response:
+            status_code = 206
+            headers = {"Content-Length": "3"}
+            def raise_for_status(self): pass
+            def __enter__(self): return self
+            def __exit__(self, *_): pass
+            def iter_content(self, chunk_size=0): return [b"def"]
+        get.return_value = Response()
+        asset = {"asset": "model.gguf", "size": 6, "download_url": "https://x/model.gguf"}
+        with tempfile.TemporaryDirectory() as folder, patch("pathlib.Path.home", return_value=Path(folder)):
+            partial = Path(folder) / ".ia_manager/models/downloads/demo_model_model.gguf.part"
+            partial.parent.mkdir(parents=True)
+            partial.write_bytes(b"abc")
+            result = model_search.download_github_gguf("demo/model", asset)
+            self.assertEqual(Path(result).read_bytes(), b"abcdef")
+            self.assertEqual(get.call_args.kwargs["headers"]["Range"], "bytes=3-")
+
 
 if __name__ == "__main__":
     unittest.main()
