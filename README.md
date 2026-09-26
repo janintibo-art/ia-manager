@@ -44,3 +44,7 @@ Stop réseau annulable, documents chargés en arrière-plan et nouvel **Espace d
 ## Mise à jour v27
 
 Protection du contexte : jauge colorée, avertissement à 75/90 % et blocage préventif des historiques trop longs. Voir [le guide v27](MISE_A_JOUR_v27.md).
+
+## Mise à jour v28
+
+Deux profils spécialisés sont disponibles : **Architecte Code** et **Directeur Artistique Image**. Ils utilisent le modèle choisi et fournissent des consignes détaillées pour vos projets. Voir [le guide v28](MISE_A_JOUR_v28.md).

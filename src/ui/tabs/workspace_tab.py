@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBo
     QFileDialog, QListWidget, QListWidgetItem, QLineEdit, QPlainTextEdit, QFormLayout, QCheckBox,
     QSpinBox, QDoubleSpinBox, QTabWidget)
 from PyQt6.QtCore import Qt
-from src.backend import settings, attachments, project_memory, providers, model_options
+from src.backend import settings, attachments, project_memory, providers, model_options, expert_profiles
 from src.ui.workers import AttachmentWorker
 from src.ui.tabs.resources_tab import ResourcesTab
 from src.ui.tabs.trials_tab import TrialsTab
@@ -204,6 +204,13 @@ class WorkspaceTab(QWidget):
                 ("Développement","Réponds en français. Vérifie les cas limites et explique les changements.",True,False),
                 ("Rédaction","Rédige en français clair, en conservant le ton demandé.",False,False),
                 ("Recherche","Distingue les faits des hypothèses. Cite les sources disponibles.",False,True))]
+        # Migration non destructive : ajouter les experts intégrés aux profils existants.
+        existing_names = {profile.get("name") for profile in saved}
+        for builtin in expert_profiles.BUILTIN_PROFILES:
+            if builtin["name"] not in existing_names:
+                saved.append(dict(builtin))
+        if saved != (settings.get("work_profiles") or []):
+            settings.set("work_profiles", saved)
         for profile in saved: self.profiles.addItem(profile['name'],profile)
         idx=self.profiles.findText(selected)
         if idx>=0:self.profiles.setCurrentIndex(idx)
