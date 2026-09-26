@@ -10,12 +10,13 @@ from typing import Dict, List, Optional
 from PyQt6.QtCore import QBuffer, QByteArray, QIODevice, Qt, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices, QImage, QKeyEvent, QTextCursor, QTextDocument
 from PyQt6.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QFileDialog, QHBoxLayout, QLabel, QMenu, QMessageBox,
-    QPushButton, QTextBrowser, QTextEdit, QVBoxLayout, QWidget,
+    QApplication, QCheckBox, QComboBox, QFileDialog, QHBoxLayout, QInputDialog, QLabel, QMenu,
+    QMessageBox, QPlainTextEdit, QPushButton, QTextBrowser, QTextEdit, QVBoxLayout, QWidget,
 )
 
 from src.backend import attachments as att
 from src.backend import code_tools, providers, settings
+from src.backend import github_tools as gt
 from src.backend import quick_commands as qc
 from src.backend import model_registry as reg
 from src.backend.ai_manager import AIManager
@@ -23,6 +24,7 @@ from src.backend.project_manager import now_iso, slugify
 from src.ui import style
 from src.ui.tabs.projects_tab import get_project_manager
 from src.ui.dialogs import ModelSettingsDialog, QuickCommandsDialog
+from src.ui.tabs.github_tab import CommandRunner
 from src.ui.workers import StreamWorker
 
 NO_PROJECT = "(aucun projet — discussion libre)"
@@ -99,6 +101,10 @@ class ChatTab(QWidget):
         self.conv_id: Optional[str] = None
         self.conv_created: Optional[str] = None
         self.image_counter = 0
+        self.apply_runner = CommandRunner(self)
+        self.apply_runner.output.connect(self.on_apply_output)
+        self.apply_runner.done.connect(self.on_apply_done)
+        self.apply_folder = ""
         self.setAcceptDrops(True)
         self.init_ui()
         self.refresh_models()
@@ -170,6 +176,14 @@ class ChatTab(QWidget):
         self.status.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
         self.status.setOpenExternalLinks(True)
         root.addWidget(self.status)
+
+        self.apply_console = QPlainTextEdit()
+        self.apply_console.setObjectName("Console")
+        self.apply_console.setReadOnly(True)
+        self.apply_console.setMaximumBlockCount(2000)
+        self.apply_console.setFixedHeight(120)
+        self.apply_console.setVisible(False)
+        root.addWidget(self.apply_console)
 
         self.attach_bar = QWidget()
         self.attach_layout = QHBoxLayout(self.attach_bar)
@@ -447,6 +461,8 @@ class ChatTab(QWidget):
                     self.status.setText(f"💾 Enregistré : {path}")
             elif kind == "zip":
                 self.save_zip(int(rest))
+            elif kind == "apply":
+                self.apply_to_repo(int(rest))
         except (IndexError, ValueError) as e:
             self.status.setText(f"⚠️ Action impossible : {e}")
 
@@ -469,6 +485,69 @@ class ChatTab(QWidget):
         out = code_tools.build_zip(blocks, path, Path(path).stem)
         folder_url = QUrl.fromLocalFile(str(out.parent)).toString()
         self.status.setText(f"📦 Zip créé : {html.escape(str(out))} — <a href='{folder_url}'>ouvrir le dossier</a>")
+
+    # ------------------------------------------------------------ appliquer au dépôt
+    def apply_to_repo(self, index: int):
+        blocks = code_tools.extract_code_blocks(self.messages[index]["content"])
+        if not blocks:
+            return
+        if self.apply_runner.busy():
+            QMessageBox.information(self, "Déjà en cours", "Une application au dépôt est déjà en cours.")
+            return
+        if not self.project_id:
+            QMessageBox.information(self, "Aucun projet actif",
+                                    "Choisissez un projet en haut du Chat : c'est son dossier de dépôt "
+                                    "(configuré dans l'onglet Projets ou GitHub) qui recevra les fichiers.")
+            return
+        meta = self.pm.get(self.project_id) or {}
+        folder = (meta.get("pc_folder") or "").strip()
+        if not folder or not Path(folder).is_dir():
+            QMessageBox.information(
+                self, "Dossier du dépôt manquant",
+                "Ce projet n'a pas encore de dossier de dépôt sur ce PC.\n\n"
+                "Indiquez-le dans l'onglet Projets (champ « Dossier sur ce PC »), ou clonez le dépôt "
+                "depuis l'onglet GitHub, puis réessayez.")
+            return
+        st = gt.tool_status()
+        if not st["git"]:
+            QMessageBox.information(self, "Git manquant",
+                                    "Installez Git (onglet GitHub) avant d'appliquer du code au dépôt.")
+            return
+        names = [b["filename"] for b in code_tools.assign_filenames(blocks)]
+        listing = "\n".join(f"• {n}" for n in names)
+        if QMessageBox.question(
+            self, "Appliquer au dépôt",
+            f"Écrire {len(names)} fichier(s) dans :\n{folder}\n\n{listing}\n\n"
+            "Puis commit + push sur GitHub ?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        ) != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            code_tools.write_to_folder(blocks, folder)
+        except OSError as e:
+            QMessageBox.warning(self, "Écriture impossible", str(e))
+            return
+        message, ok = QInputDialog.getText(self, "Message de commit", "Ce qui a changé :",
+                                           text="Code ajouté depuis le Chat IA Manager")
+        if not ok:
+            self.status.setText(f"💾 Fichiers écrits dans {folder} (non envoyés sur GitHub).")
+            return
+        self.apply_folder = folder
+        self.apply_console.clear()
+        self.apply_console.setVisible(True)
+        self.status.setText("⏳ Envoi vers le dépôt…")
+        self.apply_runner.run(gt.pc_steps("commit_push", message=message.strip() or "Mise à jour"), folder)
+
+    def on_apply_output(self, text: str):
+        self.apply_console.moveCursor(QTextCursor.MoveOperation.End)
+        self.apply_console.insertPlainText(gt.strip_ansi(text))
+        self.apply_console.moveCursor(QTextCursor.MoveOperation.End)
+
+    def on_apply_done(self, code: int):
+        if code == 0:
+            self.status.setText(f"✅ Code envoyé sur GitHub depuis {self.apply_folder}.")
+        else:
+            self.status.setText("⚠️ L'envoi vers le dépôt a échoué — détail dans la zone ci-dessus.")
 
     # ------------------------------------------------------------ discussions
     def reset_conversation(self):

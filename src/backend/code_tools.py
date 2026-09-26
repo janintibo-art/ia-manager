@@ -116,6 +116,19 @@ def build_zip(blocks: List[Dict], dest: str, root_folder: str = "") -> Path:
     return dest_path
 
 
+def write_to_folder(blocks: List[Dict], folder: str) -> List[Path]:
+    """Écrit chaque bloc directement dans le dossier du dépôt (pour « Appliquer au dépôt »).
+    Les chemins sont déjà nettoyés par _clean_path (pas de .. ni de racine absolue)."""
+    base = Path(folder)
+    written = []
+    for b in assign_filenames(blocks):
+        target = base / b["filename"]
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(b["code"] + "\n", encoding="utf-8")
+        written.append(target)
+    return written
+
+
 # ------------------------------------------------------------ affichage HTML
 INLINE_CODE_RE = re.compile(r"`([^`\n]+)`")
 BOLD_RE = re.compile(r"\*\*([^*\n]+)\*\*")
@@ -189,7 +202,8 @@ def markdown_to_html(text: str, msg_index: int, colors: Dict[str, str]) -> str:
     if blocks:
         n = len(assign_filenames(blocks))
         parts.append(f"<p><a href='zip:{msg_index}'>📦 Télécharger le code en zip ({n} fichier"
-                     f"{'s' if n > 1 else ''})</a> &nbsp;&nbsp; <a href='copyall:{msg_index}'>"
+                     f"{'s' if n > 1 else ''})</a> &nbsp;&nbsp; <a href='apply:{msg_index}'>"
+                     f"🚀 Appliquer au dépôt</a> &nbsp;&nbsp; <a href='copyall:{msg_index}'>"
                      f"📋 Copier toute la réponse</a></p>")
     else:
         parts.append(f"<p><a href='copyall:{msg_index}'>📋 Copier la réponse</a></p>")

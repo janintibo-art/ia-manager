@@ -241,6 +241,38 @@ chat.code_mode.setChecked(False)
 chat.clear_chat()
 print("Chat fichiers + code OK")
 
+# ------------------------------------------------------------- Chat : appliquer au dépôt
+import subprocess  # noqa: E402
+
+from src.backend import code_tools  # noqa: E402
+from src.backend import github_tools as gt  # noqa: E402
+from src.ui import style as ui_style  # noqa: E402
+
+repo_dir = tmp / "depot_test"
+repo_dir.mkdir()
+subprocess.run(["git", "init"], cwd=str(repo_dir), check=True, capture_output=True)
+subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=str(repo_dir),
+               check=True, capture_output=True)
+subprocess.run(["git", "config", "user.name", "Test"], cwd=str(repo_dir), check=True, capture_output=True)
+(repo_dir / "README.md").write_text("depot de test\n", encoding="utf-8")
+subprocess.run(["git", "add", "-A"], cwd=str(repo_dir), check=True, capture_output=True)
+subprocess.run(["git", "commit", "-m", "init"], cwd=str(repo_dir), check=True, capture_output=True)
+
+code_answer2 = "Voici le fichier :\n\n```python src/nouveau.py\nprint('depuis le chat')\n```"
+assert "🚀 Appliquer au dépôt" in code_tools.markdown_to_html(code_answer2, 0, ui_style.code_colors())
+blocks2 = code_tools.extract_code_blocks(code_answer2)
+assert blocks2 and blocks2[0]["filename"] == "src/nouveau.py", blocks2
+written = code_tools.write_to_folder(blocks2, str(repo_dir))
+assert written and written[0].read_text(encoding="utf-8").strip() == "print('depuis le chat')"
+
+chat.apply_console.clear()
+chat.apply_runner.run(gt.pc_steps("commit_push", message="Ajout depuis le test"), str(repo_dir))
+wait_runner(chat.apply_runner)
+gitlog = subprocess.run(["git", "log", "--oneline"], cwd=str(repo_dir),
+                        capture_output=True, text=True).stdout
+assert "Ajout depuis le test" in gitlog, gitlog
+print("Chat appliquer au dépôt OK")
+
 # ------------------------------------------------------------- Connexions
 conn = w.connections_tab
 conn.new_custom()
