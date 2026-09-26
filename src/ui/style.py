@@ -64,8 +64,8 @@ QTabWidget::pane {{
 QTabBar::tab {{
     background: transparent;
     color: {TEXT_MUTED};
-    padding: 12px 26px;
-    margin-right: 4px;
+    padding: 11px 16px;
+    margin-right: 2px;
     border-bottom: 3px solid transparent;
     font-size: {BASE_FONT_PT + 1}pt;
 }}

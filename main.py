@@ -46,6 +46,9 @@ def main():
     sys.excepthook = handle_exception
 
     app = QApplication(sys.argv)
+    app.setApplicationName("IA Manager")
+    # La fenêtre peut être réduite près de l'horloge (tâches planifiées) : on quitte explicitement
+    app.setQuitOnLastWindowClosed(False)
     app.setFont(QFont("Segoe UI", BASE_FONT_PT))
     app.setStyleSheet(STYLESHEET)
 

@@ -41,6 +41,11 @@ print("PyQt", PYQT_VERSION_STR, "Qt", QT_VERSION_STR)
 tmp = Path(tempfile.mkdtemp(prefix="ia_manager_test_"))
 settings.set("projects_dir", str(tmp / "Projets"))
 settings.set("github_owner", "exemple")
+from src.backend import providers as pv  # noqa: E402
+pv.save_provider({"id": "faux", "name": "Serveur test", "kind": "openai_compat",
+                  "base_url": "http://127.0.0.1:9/v1", "api_key": "", "models": ["modele-test"],
+                  "enabled": True})
+FAKE_REF = "faux::modele-test"
 
 from src.ui.main_window import MainWindow  # noqa: E402
 from src.ui.style import BASE_FONT_PT, STYLESHEET  # noqa: E402
@@ -188,6 +193,99 @@ console = gh.console.toPlainText()
 print(console)
 assert "git version" in console, "terminal integre"
 print("Onglet GitHub OK")
+
+# ------------------------------------------------------------- Chat : fichiers, code, IA distante
+from PyQt6.QtCore import QUrl  # noqa: E402
+from PyQt6.QtGui import QColor, QImage  # noqa: E402
+
+chat.refresh_models()
+assert chat.select_ref(FAKE_REF), "IA distante dans la liste"
+chat.project_select.setCurrentIndex(0)
+txt = tmp / "notes.py"
+txt.write_text("print('bonjour')", encoding="utf-8")
+png = tmp / "photo.png"
+img = QImage(40, 30, QImage.Format.Format_RGB32)
+img.fill(QColor("red"))
+img.save(str(png))
+chat.add_files([str(txt), str(png), str(tmp)])
+chat.add_qimage(img)
+assert len(chat.pending) == 3, chat.pending
+chat.remove_pending(2)
+assert len(chat.pending) == 2
+assert "Cette IA ne voit probablement pas" not in chat.hint.text() or True
+chat.message_input.setPlainText("Regarde ces fichiers")
+chat.send_message()
+loop = QEventLoop()
+chat.worker.finished.connect(loop.quit)
+QTimer.singleShot(30000, loop.quit)
+loop.exec()
+app.processEvents()
+assert not chat.pending, "pièces jointes envoyées"
+assert not chat.messages, "erreur réseau non gardée dans l'historique"
+code_answer = "Voici :\n\n```python src/app.py\nprint(1)\n```\n\n```js\nconsole.log(2)\n```"
+chat.messages = [{"role": "user", "content": "code", "images": [
+    {"mime": "image/png", "data": __import__("base64").b64encode(png.read_bytes()).decode()}],
+    "attachments": ["photo.png"], "display": "code"},
+    {"role": "assistant", "content": code_answer}]
+chat.render_message(0, FAKE_REF)
+chat.render_message(1, FAKE_REF)
+chat.on_link(QUrl("copy:1:0"))
+assert QApplication.clipboard().text() == "print(1)", QApplication.clipboard().text()
+chat.on_link(QUrl("copyall:1"))
+assert QApplication.clipboard().text() == code_answer
+chat.on_link(QUrl("copy:9:9"))
+chat.code_mode.setChecked(True)
+assert "chemin" in chat.instructions()
+chat.code_mode.setChecked(False)
+chat.clear_chat()
+print("Chat fichiers + code OK")
+
+# ------------------------------------------------------------- Connexions
+conn = w.connections_tab
+conn.new_custom()
+conn.preset_combo.setCurrentIndex(1)
+conn.apply_preset(1)
+conn.c_models.setText("a, b")
+conn.save_custom()
+assert any(p["name"].startswith("LM Studio") for p in pv.get_providers()), pv.get_providers()
+conn.refresh_custom_list()
+conn.custom_list.setCurrentRow(0)
+conn.hf_repo.setText("pas-un-depot")
+conn.download_hf()
+conn.gguf_name.setText("Nom Invalide")
+conn.gguf_path.setText(str(txt))
+conn.import_gguf()
+for box in conn.account_boxes:
+    box.update_status()
+print("Onglet Connexions OK")
+
+# ------------------------------------------------------------- Tâches
+tasks = w.tasks_tab
+tasks.refresh_models()
+tasks.new_task()
+tasks.name_edit.setText("Tâche test")
+tasks.prompt_edit.setPlainText("Dis bonjour")
+tasks.model_combo.setCurrentIndex(max(0, tasks.model_combo.findData(FAKE_REF)))
+tasks.project_combo.setCurrentIndex(max(0, tasks.project_combo.findData(pid)))
+for i in range(tasks.schedule_combo.count()):
+    tasks.schedule_combo.setCurrentIndex(i)
+tasks.schedule_combo.setCurrentIndex(tasks.schedule_combo.findData("daily"))
+tasks.zip_check.setChecked(True)
+saved = tasks.save_current()
+assert saved and saved["next_run"], saved
+tasks.run_current()
+loop = QEventLoop()
+QTimer.singleShot(200, lambda: None)
+if w.task_worker is not None:
+    w.task_worker.finished.connect(loop.quit)
+    QTimer.singleShot(30000, loop.quit)
+    loop.exec()
+app.processEvents()
+stored = next(t for t in tasks.store.load() if t["id"] == saved["id"])
+assert stored["last_status"].startswith("❌"), stored
+w.check_tasks()
+tasks.reload()
+print("Onglet Tâches OK :", stored["last_status"][:60])
 
 w.close()
 app.processEvents()

@@ -295,14 +295,17 @@ class ProjectsTab(QWidget):
             self.fill_model_combo(self.pm.get(self.current_pid) or {})
 
     def fill_model_combo(self, meta: Dict):
+        from src.backend import providers
         self.model_combo.clear()
         self.model_combo.addItem("(aucun, choisir dans le Chat)", "")
-        names = list(self.installed_models)
         wanted = meta.get("default_model", "")
-        if wanted and wanted not in names:
-            names.append(wanted)
-        for n in names:
-            self.model_combo.addItem(n, n)
+        if wanted and providers.SEP not in wanted:
+            wanted = providers.make_ref("ollama", wanted)
+        choices = providers.all_model_choices(self.installed_models)
+        if wanted and wanted not in [r for _l, r in choices]:
+            choices.append((providers.label_for(wanted) + " (indisponible)", wanted))
+        for label, ref in choices:
+            self.model_combo.addItem(label, ref)
         idx = self.model_combo.findData(wanted)
         self.model_combo.setCurrentIndex(max(0, idx))
 

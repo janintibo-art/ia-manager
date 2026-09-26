@@ -52,30 +52,15 @@ class AIManager:
             return f"Erreur : {e}"
 
     def chat_messages(self, model: str, messages: List[Dict], system: str = "") -> str:
-        """Discussion avec historique ; `system` = consignes du projet"""
-        payload_messages = []
-        if system.strip():
-            payload_messages.append({"role": "system", "content": system})
-        payload_messages += [{"role": m["role"], "content": m["content"]} for m in messages]
-        try:
-            response = requests.post(
-                f"{self.ollama_url}/api/chat",
-                json={"model": model, "messages": payload_messages, "stream": False},
-                timeout=900,
-            )
-            if response.status_code == 200:
-                return response.json().get("message", {}).get("content", "")
-            return f"Erreur Ollama : {response.status_code} {response.text[:200]}"
-        except requests.exceptions.ConnectionError:
-            return "Ollama n'est pas lancé. Installez-le depuis ollama.com puis relancez."
-        except Exception as e:
-            return f"Erreur : {e}"
+        """Discussion avec historique (images comprises) ; `system` = consignes du projet"""
+        from src.backend.providers import chat_ollama
+        return chat_ollama(model, messages, system)
 
     def download_model(self, model_id: str) -> bool:
         """Télécharger un modèle via Ollama"""
         response = requests.post(
             f"{self.ollama_url}/api/pull",
-            json={"name": model_id, "stream": False},
+            json={"model": model_id, "name": model_id, "stream": False},
             timeout=7200,
         )
         if response.status_code != 200:
