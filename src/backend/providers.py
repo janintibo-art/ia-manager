@@ -285,9 +285,16 @@ def chat(ref: str, messages: List[Dict], system: str = "") -> str:
 
 
 # ------------------------------------------------------------ réponses mot par mot
+def _lines(response):
+    """Lignes d'une réponse en continu, transmises dès leur arrivée.
+    (Par défaut, requests attend 512 octets avant de rendre la main : les mots arriveraient par paquets.)"""
+    chunked = "chunked" in response.headers.get("Transfer-Encoding", "").lower()
+    return response.iter_lines(chunk_size=None if chunked else 1, decode_unicode=False)
+
+
 def _sse_data(response):
     """Lignes « data: … » d'un flux SSE (OpenAI, Anthropic)"""
-    for raw in response.iter_lines(decode_unicode=False):
+    for raw in _lines(response):
         if not raw:
             continue
         line = raw.decode("utf-8", errors="replace")
@@ -329,7 +336,7 @@ def chat_stream(ref: str, messages: List[Dict], system: str = "", on_token=None,
             with requests.post(f"{OLLAMA_URL}/api/chat", json=body, stream=True, timeout=(10, 900)) as r:
                 if r.status_code != 200:
                     return f"Erreur Ollama : {r.status_code} {r.text[:200]}", stats
-                for raw in r.iter_lines():
+                for raw in _lines(r):
                     if should_stop():
                         stats["stopped"] = True
                         break
