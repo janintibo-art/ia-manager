@@ -17,6 +17,7 @@ from src.backend import model_registry as reg
 from src.backend import model_search as ms
 from src.backend import providers as pv
 from src.backend import download_history
+from src.backend import model_favorites
 from src.backend.ai_manager import AIManager
 from src.backend.system_analyzer import SystemAnalyzer
 from src.ui import style
@@ -154,6 +155,9 @@ class SearchTab(QWidget):
         self.hf_btn = QPushButton("🌐 Voir sur Hugging Face")
         self.hf_btn.clicked.connect(self.open_on_hf)
         btns.addWidget(self.hf_btn)
+        self.favorite_btn = QPushButton("☆ Ajouter aux favoris")
+        self.favorite_btn.clicked.connect(self.toggle_favorite)
+        btns.addWidget(self.favorite_btn)
         btns.addStretch()
         dl.addLayout(btns)
         splitter.addWidget(detail_card)
@@ -251,12 +255,14 @@ class SearchTab(QWidget):
         modelscope = self.source.currentIndex() == 2
         civitai = self.source.currentIndex() == 3
         for m in self.results:
+            source = self.current_source_key()
+            mark = "★ " if model_favorites.is_favorite(source, m["id"]) else ""
             if github:
-                item = QListWidgetItem(f"🐙 {m['id']}\n      ⭐ {ms.human_number(m['downloads'])} · {m.get('description','')[:100]}")
+                item = QListWidgetItem(f"{mark}🐙 {m['id']}\n      ⭐ {ms.human_number(m['downloads'])} · {m.get('description','')[:100]}")
             elif modelscope:
-                item = QListWidgetItem(f"🌏 {m['id']}\n      ⬇ {ms.human_number(m['downloads'])} · {m.get('description','')[:100]}")
+                item = QListWidgetItem(f"{mark}🌏 {m['id']}\n      ⬇ {ms.human_number(m['downloads'])} · {m.get('description','')[:100]}")
             elif civitai:
-                item = QListWidgetItem(f"🎨 {m['name']} · {m.get('type','')}\n      ⬇ {ms.human_number(m['downloads'])} · {m['author']}")
+                item = QListWidgetItem(f"{mark}🎨 {m['name']} · {m.get('type','')}\n      ⬇ {ms.human_number(m['downloads'])} · {m['author']}")
             else:
                 lock = " 🔒" if m["gated"] else ""
                 kind = "🖼️ " if m["pipeline"] == "image-text-to-text" else ""
@@ -281,6 +287,18 @@ class SearchTab(QWidget):
         self.quant_list.clear()
         self.detail.setHtml(f"<h2>{html.escape(repo)}</h2><p>⏳ Chargement de la fiche…</p>")
         self.update_buttons()
+
+    def current_source_key(self):
+        return ("github", "modelscope", "civitai", "huggingface")[self.source.currentIndex()]
+
+    def toggle_favorite(self):
+        item = self.result_list.currentItem()
+        if not item:
+            return
+        model_id = item.data(Qt.ItemDataRole.UserRole)
+        state = model_favorites.toggle(self.current_source_key(), model_id, model_id.split("/")[-1])
+        self.favorite_btn.setText("★ Retirer des favoris" if state else "☆ Ajouter aux favoris")
+        self.search() if self.results else None
         detail_fn = ms.github_details if self.source.currentIndex() == 1 else (ms.modelscope_details if self.source.currentIndex() == 2 else (ms.civitai_details if self.source.currentIndex() == 3 else ms.model_details))
         self.detail_worker = FunctionWorker(detail_fn, repo)
         self.detail_worker.done.connect(lambda ok, res, r=rid, rp=repo: self.on_details(r, rp, ok, res))
@@ -384,6 +402,9 @@ class SearchTab(QWidget):
         self.download_btn.setEnabled(bool(q) and not q["split"] and not busy)
         self.download_btn.setText("⬇ Télécharger pour outil image" if self.details and self.details.get("pipeline") == "civitai" else "⬇ Télécharger cette version")
         self.hf_btn.setEnabled(self.details is not None or self.result_list.currentItem() is not None)
+        item = self.result_list.currentItem()
+        favorite = bool(item and model_favorites.is_favorite(self.current_source_key(), item.data(Qt.ItemDataRole.UserRole)))
+        self.favorite_btn.setText("★ Retirer des favoris" if favorite else "☆ Ajouter aux favoris")
 
     def open_on_hf(self):
         item = self.result_list.currentItem()
