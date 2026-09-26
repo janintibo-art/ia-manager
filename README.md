@@ -128,3 +128,7 @@ Les métadonnées des 100 dernières recherches sont conservées sur disque pour
 ## Mise à jour v48
 
 La recherche ModelScope accepte un jeton facultatif pour les dépôts privés et les limites API. Le jeton est masqué et exclu des exports. Voir [le guide v48](MISE_A_JOUR_v48.md).
+
+## Mise à jour v49
+
+Les favoris peuvent être effacés en une seule action après confirmation, sans toucher aux fichiers téléchargés ni aux modèles installés. Voir [le guide v49](MISE_A_JOUR_v49.md).

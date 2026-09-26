@@ -86,6 +86,9 @@ class SearchTab(QWidget):
         fav_import = QPushButton("📥 Importer favoris")
         fav_import.clicked.connect(self.import_favorites)
         row.addWidget(fav_import)
+        fav_clear = QPushButton("🗑 Effacer favoris")
+        fav_clear.clicked.connect(self.clear_favorites)
+        row.addWidget(fav_clear)
         self.category = QComboBox()
         self.category.addItems(list(ms.CATEGORIES))
         row.addWidget(self.category, 1)
@@ -331,6 +334,19 @@ class SearchTab(QWidget):
                 self.on_favorites_filter(self.favorites_only.isChecked())
         except Exception as error:
             self.status.setText(f"❌ Import impossible : {error}")
+
+    def clear_favorites(self):
+        count = len(model_favorites.list_favorites())
+        if not count:
+            self.status.setText("Aucun favori à effacer.")
+            return
+        reply = QMessageBox.question(self, "Effacer les favoris", f"Effacer les {count} favoris ?",
+                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
+            model_favorites.clear()
+            self.status.setText("✅ Favoris effacés.")
+            self.result_list.clear()
+            self.update_buttons()
 
     def current_source_key(self):
         return ("github", "modelscope", "civitai", "huggingface")[self.source.currentIndex()]

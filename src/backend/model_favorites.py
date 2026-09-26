@@ -40,3 +40,9 @@ def import_file(path: str) -> int:
     valid = [x for x in data["favorites"] if isinstance(x, dict) and x.get("id") and x.get("source")]
     settings.set("model_favorites", valid[:200])
     return len(valid[:200])
+
+
+def clear() -> int:
+    count = len(list_favorites())
+    settings.set("model_favorites", [])
+    return count
