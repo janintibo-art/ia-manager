@@ -19,7 +19,8 @@ def snapshot():
                          "project_memory_enabled": settings.get("project_memory_enabled"),
                          "serialize_local_jobs": settings.get("serialize_local_jobs"),
                          "github_token_configured": bool(settings.get("github_token")),
-                         "civitai_token_configured": bool(settings.get("civitai_token"))},
+                         "civitai_token_configured": bool(settings.get("civitai_token")),
+                         "modelscope_token_configured": bool(settings.get("modelscope_token"))},
             "system": info, "providers": safe_providers}
 
 

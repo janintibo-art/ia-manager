@@ -116,6 +116,11 @@ def civitai_headers() -> Dict[str, str]:
     token = str(settings.get("civitai_token") or "").strip()
     return {"Authorization": f"Bearer {token}"} if token else {}
 
+
+def modelscope_headers() -> Dict[str, str]:
+    token = str(settings.get("modelscope_token") or "").strip()
+    return {"Authorization": f"Bearer {token}"} if token else {}
+
 SORTS = {
     "🔥 Tendances": "trendingScore",
     "⬇ Plus téléchargés": "downloads",
@@ -194,7 +199,8 @@ def search_github(query: str = "", limit: int = 30, timeout: int = 20) -> List[D
 
 def search_modelscope(query: str = "", limit: int = 30, timeout: int = 20) -> List[Dict]:
     """Recherche publique ModelScope. Les modèles non-GGUF restent consultables mais non installés dans Ollama."""
-    r = requests.get(MODELSCOPE_API, params={"search": query.strip(), "sort": "downloads", "page_size": limit}, timeout=timeout)
+    r = requests.get(MODELSCOPE_API, params={"search": query.strip(), "sort": "downloads", "page_size": limit},
+                     headers=modelscope_headers(), timeout=timeout)
     r.raise_for_status()
     payload = r.json().get("data") or {}
     return [parse_modelscope_listing(item) for item in (payload.get("models") or payload.get("Models") or [])]
@@ -211,7 +217,7 @@ def parse_modelscope_listing(item: Dict) -> Dict:
 
 
 def modelscope_details(repo: str, timeout: int = 20) -> Dict:
-    r = requests.get(f"{MODELSCOPE_API}/{repo}", timeout=timeout)
+    r = requests.get(f"{MODELSCOPE_API}/{repo}", headers=modelscope_headers(), timeout=timeout)
     r.raise_for_status()
     data = r.json().get("data") or {}
     if isinstance(data, list):

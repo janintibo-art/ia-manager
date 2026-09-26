@@ -124,3 +124,7 @@ Les résultats de recherche sont réutilisés pendant 120 secondes et restent co
 ## Mise à jour v47
 
 Les métadonnées des 100 dernières recherches sont conservées sur disque pour rester disponibles hors ligne après redémarrage, sans enregistrer de contenu sensible. Voir [le guide v47](MISE_A_JOUR_v47.md).
+
+## Mise à jour v48
+
+La recherche ModelScope accepte un jeton facultatif pour les dépôts privés et les limites API. Le jeton est masqué et exclu des exports. Voir [le guide v48](MISE_A_JOUR_v48.md).

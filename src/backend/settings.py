@@ -26,6 +26,7 @@ DEFAULTS: Dict[str, Any] = {
     "searxng_url": "",
     "github_token": "",
     "civitai_token": "",
+    "modelscope_token": "",
     "offline_mode": False,
 }
 

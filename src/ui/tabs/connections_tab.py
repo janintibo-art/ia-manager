@@ -312,6 +312,10 @@ class ConnectionsTab(QWidget):
         self.civitai_token.setEchoMode(QLineEdit.EchoMode.Password)
         self.civitai_token.setPlaceholderText("Jeton Civitai facultatif pour les fichiers privés")
         web_form.addRow("Jeton Civitai :", self.civitai_token)
+        self.modelscope_token = QLineEdit(settings.get("modelscope_token") or "")
+        self.modelscope_token.setEchoMode(QLineEdit.EchoMode.Password)
+        self.modelscope_token.setPlaceholderText("Jeton ModelScope facultatif pour dépôts privés")
+        web_form.addRow("Jeton ModelScope :", self.modelscope_token)
         lay.addLayout(web_form)
         web_row = QHBoxLayout()
         brave_key_btn = QPushButton("🔑 Obtenir une clé Brave")
@@ -384,6 +388,7 @@ class ConnectionsTab(QWidget):
         settings.set("searxng_url", self.searxng_url.text().strip())
         settings.set("github_token", self.github_token.text().strip())
         settings.set("civitai_token", self.civitai_token.text().strip())
+        settings.set("modelscope_token", self.modelscope_token.text().strip())
         self.web_status.setText("✅ Enregistré.")
 
     # ------------------------------------------------------ serveurs compatibles
