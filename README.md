@@ -76,3 +76,7 @@ Un historique local des modèles GitHub installés indique le nombre de fichiers
 ## Mise à jour v35
 
 La recherche GitHub accepte un jeton facultatif pour éviter les limites de l'API. Le jeton reste masqué et n'est pas exporté dans les diagnostics ou sauvegardes. Voir [le guide v35](MISE_A_JOUR_v35.md).
+
+## Mise à jour v36
+
+La recherche multi-sources inclut maintenant **ModelScope**. Les formats non compatibles avec Ollama sont identifiés avant toute installation ; les fichiers GGUF restent installables automatiquement. Voir [le guide v36](MISE_A_JOUR_v36.md).

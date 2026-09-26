@@ -13,6 +13,8 @@ HF_API = "https://huggingface.co/api/models"
 HF_SITE = "https://huggingface.co"
 GITHUB_API = "https://api.github.com"
 GITHUB_SITE = "https://github.com"
+MODELSCOPE_API = "https://modelscope.cn/openapi/v1/models"
+MODELSCOPE_SITE = "https://modelscope.cn/models"
 
 
 def github_headers() -> Dict[str, str]:
@@ -96,6 +98,37 @@ def search_github(query: str = "", limit: int = 30, timeout: int = 20) -> List[D
         raise RuntimeError("Limite GitHub atteinte. Ajoutez un jeton facultatif dans Connexions, puis réessayez.")
     r.raise_for_status()
     return [parse_github_listing(item) for item in r.json().get("items", [])]
+
+
+def search_modelscope(query: str = "", limit: int = 30, timeout: int = 20) -> List[Dict]:
+    """Recherche publique ModelScope. Les modèles non-GGUF restent consultables mais non installés dans Ollama."""
+    r = requests.get(MODELSCOPE_API, params={"search": query.strip(), "sort": "downloads", "page_size": limit}, timeout=timeout)
+    r.raise_for_status()
+    payload = r.json().get("data") or {}
+    return [parse_modelscope_listing(item) for item in (payload.get("models") or payload.get("Models") or [])]
+
+
+def parse_modelscope_listing(item: Dict) -> Dict:
+    repo = item.get("id") or item.get("Path") or item.get("path") or ""
+    return {"id": repo, "name": repo.split("/")[-1], "author": repo.split("/")[0] if "/" in repo else "",
+            "downloads": int(item.get("downloads") or item.get("Downloads") or 0),
+            "likes": int(item.get("likes") or item.get("Likes") or 0),
+            "updated": item.get("last_modified") or item.get("LastModified") or "",
+            "description": item.get("description") or item.get("Description") or "",
+            "pipeline": "modelscope", "gated": False, "tags": item.get("tags") or []}
+
+
+def modelscope_details(repo: str, timeout: int = 20) -> Dict:
+    r = requests.get(f"{MODELSCOPE_API}/{repo}", timeout=timeout)
+    r.raise_for_status()
+    data = r.json().get("data") or {}
+    if isinstance(data, list):
+        data = data[0] if data else {}
+    item = parse_modelscope_listing(data)
+    item.update({"license": data.get("license", ""), "base_model": "", "architecture": "",
+                 "context": 0, "params": 0, "languages": [], "readme": data.get("description", ""),
+                 "quants": [], "html_url": f"{MODELSCOPE_SITE}/{repo}"})
+    return item
 
 
 def parse_github_listing(item: Dict) -> Dict:

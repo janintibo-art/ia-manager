@@ -72,7 +72,7 @@ class SearchTab(QWidget):
         self.query.returnPressed.connect(self.search)
         row.addWidget(self.query, 3)
         self.source = QComboBox()
-        self.source.addItems(["🤗 Hugging Face", "🐙 GitHub (GGUF)"])
+        self.source.addItems(["🤗 Hugging Face", "🐙 GitHub (GGUF)", "🌏 ModelScope"])
         self.source.currentIndexChanged.connect(self.source_changed)
         row.addWidget(self.source, 1)
         self.category = QComboBox()
@@ -209,10 +209,11 @@ class SearchTab(QWidget):
 
     def source_changed(self):
         github = self.source.currentIndex() == 1
-        self.category.setVisible(not github)
-        self.sort.setVisible(not github)
-        self.french.setVisible(not github)
-        self.hf_btn.setText("🌐 Voir sur GitHub" if github else "🌐 Voir sur Hugging Face")
+        modelscope = self.source.currentIndex() == 2
+        self.category.setVisible(not github and not modelscope)
+        self.sort.setVisible(not github and not modelscope)
+        self.french.setVisible(not github and not modelscope)
+        self.hf_btn.setText("🌐 Voir sur GitHub" if github else ("🌐 Voir sur ModelScope" if modelscope else "🌐 Voir sur Hugging Face"))
         self.result_list.clear(); self.quant_list.clear(); self.details = None
         self.detail.setHtml(self.welcome_html())
         self.update_buttons()
@@ -224,6 +225,8 @@ class SearchTab(QWidget):
         self.search_btn.setEnabled(False)
         if self.source.currentIndex() == 1:
             self.search_worker = FunctionWorker(ms.search_github, self.query.text())
+        elif self.source.currentIndex() == 2:
+            self.search_worker = FunctionWorker(ms.search_modelscope, self.query.text())
         else:
             self.search_worker = FunctionWorker(
                 ms.search_hf, self.query.text(), ms.CATEGORIES[self.category.currentText()],
@@ -241,9 +244,12 @@ class SearchTab(QWidget):
         self.results = list(result)
         self.result_list.clear()
         github = self.source.currentIndex() == 1
+        modelscope = self.source.currentIndex() == 2
         for m in self.results:
             if github:
                 item = QListWidgetItem(f"🐙 {m['id']}\n      ⭐ {ms.human_number(m['downloads'])} · {m.get('description','')[:100]}")
+            elif modelscope:
+                item = QListWidgetItem(f"🌏 {m['id']}\n      ⬇ {ms.human_number(m['downloads'])} · {m.get('description','')[:100]}")
             else:
                 lock = " 🔒" if m["gated"] else ""
                 kind = "🖼️ " if m["pipeline"] == "image-text-to-text" else ""
@@ -268,7 +274,8 @@ class SearchTab(QWidget):
         self.quant_list.clear()
         self.detail.setHtml(f"<h2>{html.escape(repo)}</h2><p>⏳ Chargement de la fiche…</p>")
         self.update_buttons()
-        self.detail_worker = FunctionWorker(ms.github_details if self.source.currentIndex() == 1 else ms.model_details, repo)
+        detail_fn = ms.github_details if self.source.currentIndex() == 1 else (ms.modelscope_details if self.source.currentIndex() == 2 else ms.model_details)
+        self.detail_worker = FunctionWorker(detail_fn, repo)
         self.detail_worker.done.connect(lambda ok, res, r=rid, rp=repo: self.on_details(r, rp, ok, res))
         self.detail_worker.start()
 
@@ -294,6 +301,9 @@ class SearchTab(QWidget):
         if d.get("pipeline") == "github":
             row("Source", "GitHub · releases GGUF")
             row("Dépôt", d["id"])
+        elif d.get("pipeline") == "modelscope":
+            row("Source", "ModelScope · catalogue public")
+            row("Dépôt", d["id"])
         else:
             row("Auteur", d["author"])
         row("Taille", ms.readable_params(d["params"]) + (" de paramètres" if d["params"] else ""))
@@ -314,9 +324,13 @@ class SearchTab(QWidget):
 
         gated = (f"<p style='color:{style.ORANGE}'>🔒 Accès restreint : il faut accepter les conditions sur "
                  f"Hugging Face, le téléchargement direct peut échouer.</p>") if d["gated"] else ""
+        notice = (f"<p style='color:{muted}'>ℹ️ Ce dépôt ModelScope peut contenir des formats Python, Safetensors ou Diffusers. "
+                  "Il est consultable ici, mais l'installation automatique dans Ollama nécessite un fichier GGUF.</p>"
+                  if d.get("pipeline") == "modelscope" else "")
         self.detail.setHtml(
             f"<h2>{html.escape(d['id'].split('/')[-1])}</h2>{gated}"
             f"<table cellspacing='0'>{''.join(rows)}</table>"
+            + notice
             + (f"<h3>Présentation (extrait)</h3><p style='color:{muted}'>{excerpt}</p>" if excerpt else ""))
 
         best = ms.best_quant(d["quants"], self.system_info) if d.get("pipeline") != "github" else next(
@@ -361,7 +375,7 @@ class SearchTab(QWidget):
     def open_on_hf(self):
         item = self.result_list.currentItem()
         if item:
-            base = ms.GITHUB_SITE if self.source.currentIndex() == 1 else ms.HF_SITE
+            base = ms.GITHUB_SITE if self.source.currentIndex() == 1 else (ms.MODELSCOPE_SITE if self.source.currentIndex() == 2 else ms.HF_SITE)
             QDesktopServices.openUrl(QUrl(f"{base}/{item.data(Qt.ItemDataRole.UserRole)}"))
 
     # ------------------------------------------------------------ téléchargement
