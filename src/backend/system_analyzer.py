@@ -1,6 +1,7 @@
 """Analyseur de système - CPU, GPU, RAM"""
 
 import platform
+from functools import lru_cache
 import subprocess
 from typing import Dict, List
 
@@ -19,6 +20,7 @@ def _run(cmd: List[str]) -> str:
         return ""
 
 
+@lru_cache(maxsize=1)
 def detect_gpu() -> Dict:
     """Détecter la carte graphique et sa VRAM (NVIDIA via nvidia-smi, sinon Windows)"""
     out = _run([

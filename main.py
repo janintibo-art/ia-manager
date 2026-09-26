@@ -6,21 +6,23 @@ IA Manager - Application desktop pour gérer les IA locales
 import pkgutil  # noqa: F401  requis par PyQt6, a embarquer dans l exe
 import sys
 from pathlib import Path
-from src.ui.main_window import MainWindow
+
+from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QApplication
+
+from src.ui.main_window import MainWindow
+from src.ui.style import BASE_FONT_PT, STYLESHEET
 
 
 def main():
     """Point d'entrée principal"""
-    # Créer les dossiers de configuration s'ils n'existent pas
-    models_dir = Path.home() / ".ia_manager" / "models"
-    models_dir.mkdir(parents=True, exist_ok=True)
+    (Path.home() / ".ia_manager" / "models").mkdir(parents=True, exist_ok=True)
+    (Path.home() / ".ia_manager" / "config").mkdir(parents=True, exist_ok=True)
 
-    config_dir = Path.home() / ".ia_manager" / "config"
-    config_dir.mkdir(parents=True, exist_ok=True)
-
-    # Lancer l'application
     app = QApplication(sys.argv)
+    app.setFont(QFont("Segoe UI", BASE_FONT_PT))
+    app.setStyleSheet(STYLESHEET)
+
     window = MainWindow()
     window.show()
 
