@@ -1,11 +1,28 @@
 """Onglet Chat - Discuter avec l'IA"""
 
+import html
+
+from PyQt6.QtCore import QThread, pyqtSignal
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QComboBox,
-    QPushButton, QTextEdit, QLabel, QScrollArea, QMessageBox
+    QComboBox, QHBoxLayout, QLabel, QMessageBox, QPushButton,
+    QTextEdit, QVBoxLayout, QWidget,
 )
-from PyQt6.QtCore import Qt
+
 from src.backend.ai_manager import AIManager
+
+
+class ChatWorker(QThread):
+    """Interroge l'IA sans figer la fenêtre"""
+    answered = pyqtSignal(str)
+
+    def __init__(self, ai_manager, model, message):
+        super().__init__()
+        self.ai_manager = ai_manager
+        self.model = model
+        self.message = message
+
+    def run(self):
+        self.answered.emit(self.ai_manager.chat(self.model, self.message))
 
 
 class ChatTab(QWidget):
@@ -14,80 +31,77 @@ class ChatTab(QWidget):
     def __init__(self):
         super().__init__()
         self.ai_manager = AIManager()
+        self.worker = None
         self.init_ui()
-
-    def init_ui(self):
-        """Initialiser l'interface du chat"""
-        layout = QVBoxLayout()
-
-        # Sélection du modèle
-        model_layout = QHBoxLayout()
-        model_layout.addWidget(QLabel("Modèle :"))
-
-        self.model_select = QComboBox()
-        self.model_select.addItem("Sélectionner un modèle...")
         self.refresh_models()
 
-        model_layout.addWidget(self.model_select)
+    def init_ui(self):
+        layout = QVBoxLayout()
 
+        model_layout = QHBoxLayout()
+        model_layout.addWidget(QLabel("Modèle :"))
+        self.model_select = QComboBox()
+        model_layout.addWidget(self.model_select, 1)
         refresh_btn = QPushButton("🔄 Actualiser")
         refresh_btn.clicked.connect(self.refresh_models)
         model_layout.addWidget(refresh_btn)
-
         layout.addLayout(model_layout)
 
-        # Historique du chat
         self.chat_display = QTextEdit()
         self.chat_display.setReadOnly(True)
         layout.addWidget(self.chat_display)
 
-        # Saisie du message
         input_layout = QHBoxLayout()
-
         self.message_input = QTextEdit()
         self.message_input.setMaximumHeight(80)
         self.message_input.setPlaceholderText("Entrez votre message...")
         input_layout.addWidget(self.message_input)
-
-        send_btn = QPushButton("Envoyer")
-        send_btn.clicked.connect(self.send_message)
-        input_layout.addWidget(send_btn)
-
+        self.send_btn = QPushButton("Envoyer")
+        self.send_btn.clicked.connect(self.send_message)
+        input_layout.addWidget(self.send_btn)
         layout.addLayout(input_layout)
+
         self.setLayout(layout)
 
     def refresh_models(self):
-        """Actualiser la liste des modèles disponibles"""
         self.model_select.clear()
         models = self.ai_manager.get_available_models()
-
         if models:
-            for model in models:
-                self.model_select.addItem(model)
+            self.model_select.addItems(models)
+        elif not self.ai_manager.is_ollama_running():
+            self.chat_display.setText(
+                "⚠️ Ollama n'est pas lancé. Installez-le depuis https://ollama.com "
+                "puis cliquez sur Actualiser."
+            )
         else:
-            self.model_select.addItem("Aucun modèle disponible")
-            self.chat_display.setText("⚠️ Aucun modèle disponible. Allez à l'onglet 'Modèles' pour en télécharger.")
+            self.chat_display.setText(
+                "⚠️ Aucun modèle installé. Allez dans l'onglet « Modèles » pour en télécharger."
+            )
 
     def send_message(self):
-        """Envoyer un message à l'IA"""
         model = self.model_select.currentText()
         message = self.message_input.toPlainText().strip()
 
+        if not model:
+            QMessageBox.warning(self, "Erreur", "Aucun modèle sélectionné.")
+            return
         if not message:
             QMessageBox.warning(self, "Erreur", "Veuillez entrer un message.")
             return
-
-        if model == "Sélectionner un modèle..." or not model:
-            QMessageBox.warning(self, "Erreur", "Veuillez sélectionner un modèle.")
+        if self.worker is not None and self.worker.isRunning():
             return
 
-        # Afficher le message de l'utilisateur
-        self.chat_display.append(f"<b>Vous :</b> {message}\n")
+        self.chat_display.append(f"<b>Vous :</b> {html.escape(message)}<br>")
         self.message_input.clear()
+        self.send_btn.setEnabled(False)
+        self.send_btn.setText("…")
 
-        # Obtenir la réponse
-        try:
-            response = self.ai_manager.chat(model, message)
-            self.chat_display.append(f"<b>IA ({model}) :</b> {response}\n")
-        except Exception as e:
-            self.chat_display.append(f"<b style='color:red'>Erreur :</b> {str(e)}\n")
+        self.worker = ChatWorker(self.ai_manager, model, message)
+        self.worker.answered.connect(lambda text: self.on_answer(model, text))
+        self.worker.start()
+
+    def on_answer(self, model, text):
+        safe = html.escape(text).replace("\n", "<br>")
+        self.chat_display.append(f"<b>IA ({html.escape(model)}) :</b> {safe}<br>")
+        self.send_btn.setEnabled(True)
+        self.send_btn.setText("Envoyer")

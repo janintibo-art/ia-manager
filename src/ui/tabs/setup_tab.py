@@ -152,6 +152,7 @@ class SetupTab(QWidget):
 🎮 VRAM (GPU) : {allocation['vram_mb']} MB
 💾 RAM (CPU) : {allocation['ram_mb']} MB
 ⚡ Priorité : {priority_text}
+📦 Taille de modèle max conseillée : {allocation['max_model_gb']:.1f} Go
 
 💡 Conseil : {allocation['advice']}
         """
