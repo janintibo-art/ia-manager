@@ -15,6 +15,8 @@ GITHUB_API = "https://api.github.com"
 GITHUB_SITE = "https://github.com"
 MODELSCOPE_API = "https://modelscope.cn/openapi/v1/models"
 MODELSCOPE_SITE = "https://modelscope.cn/models"
+CIVITAI_API = "https://civitai.com/api/v1/models"
+CIVITAI_SITE = "https://civitai.com/models"
 
 
 def github_headers() -> Dict[str, str]:
@@ -128,6 +130,33 @@ def modelscope_details(repo: str, timeout: int = 20) -> Dict:
     item.update({"license": data.get("license", ""), "base_model": "", "architecture": "",
                  "context": 0, "params": 0, "languages": [], "readme": data.get("description", ""),
                  "quants": [], "html_url": f"{MODELSCOPE_SITE}/{repo}"})
+    return item
+
+
+def search_civitai(query: str = "", limit: int = 30, timeout: int = 20) -> List[Dict]:
+    """Recherche publique Civitai pour modèles image, LoRA, VAE et embeddings."""
+    r = requests.get(CIVITAI_API, params={"query": query.strip(), "limit": min(limit, 100),
+                                          "sort": "Most Downloaded", "nsfw": "false"}, timeout=timeout)
+    r.raise_for_status()
+    return [parse_civitai_listing(item) for item in (r.json().get("items") or [])]
+
+
+def parse_civitai_listing(item: Dict) -> Dict:
+    model_id = str(item.get("id", ""))
+    return {"id": model_id, "name": item.get("name", model_id), "author": (item.get("creator") or {}).get("username", ""),
+            "downloads": int(item.get("stats", {}).get("downloadCount") or 0),
+            "likes": int(item.get("stats", {}).get("favoriteCount") or 0), "updated": item.get("updatedAt", ""),
+            "description": item.get("description", "") or "", "type": item.get("type", ""),
+            "pipeline": "civitai", "gated": False, "tags": item.get("tags") or []}
+
+
+def civitai_details(model_id: str, timeout: int = 20) -> Dict:
+    r = requests.get(f"{CIVITAI_API}/{model_id}", timeout=timeout)
+    r.raise_for_status()
+    item = parse_civitai_listing(r.json())
+    item.update({"license": "", "base_model": "", "architecture": "", "context": 0, "params": 0,
+                 "languages": [], "readme": item.get("description", ""), "quants": [],
+                 "html_url": f"{CIVITAI_SITE}/{model_id}"})
     return item
 
 

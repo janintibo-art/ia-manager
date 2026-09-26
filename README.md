@@ -80,3 +80,7 @@ La recherche GitHub accepte un jeton facultatif pour éviter les limites de l'AP
 ## Mise à jour v36
 
 La recherche multi-sources inclut maintenant **ModelScope**. Les formats non compatibles avec Ollama sont identifiés avant toute installation ; les fichiers GGUF restent installables automatiquement. Voir [le guide v36](MISE_A_JOUR_v36.md).
+
+## Mise à jour v37
+
+La recherche inclut **Civitai** pour les modèles image, LoRA, VAE et embeddings. Les formats image sont clairement séparés des modèles GGUF installables dans Ollama. Voir [le guide v37](MISE_A_JOUR_v37.md).

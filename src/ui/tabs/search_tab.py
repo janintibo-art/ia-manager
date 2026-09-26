@@ -72,7 +72,7 @@ class SearchTab(QWidget):
         self.query.returnPressed.connect(self.search)
         row.addWidget(self.query, 3)
         self.source = QComboBox()
-        self.source.addItems(["🤗 Hugging Face", "🐙 GitHub (GGUF)", "🌏 ModelScope"])
+        self.source.addItems(["🤗 Hugging Face", "🐙 GitHub (GGUF)", "🌏 ModelScope", "🎨 Civitai (image)"])
         self.source.currentIndexChanged.connect(self.source_changed)
         row.addWidget(self.source, 1)
         self.category = QComboBox()
@@ -210,10 +210,11 @@ class SearchTab(QWidget):
     def source_changed(self):
         github = self.source.currentIndex() == 1
         modelscope = self.source.currentIndex() == 2
-        self.category.setVisible(not github and not modelscope)
-        self.sort.setVisible(not github and not modelscope)
-        self.french.setVisible(not github and not modelscope)
-        self.hf_btn.setText("🌐 Voir sur GitHub" if github else ("🌐 Voir sur ModelScope" if modelscope else "🌐 Voir sur Hugging Face"))
+        civitai = self.source.currentIndex() == 3
+        self.category.setVisible(not github and not modelscope and not civitai)
+        self.sort.setVisible(not github and not modelscope and not civitai)
+        self.french.setVisible(not github and not modelscope and not civitai)
+        self.hf_btn.setText("🌐 Voir sur GitHub" if github else ("🌐 Voir sur ModelScope" if modelscope else ("🌐 Voir sur Civitai" if civitai else "🌐 Voir sur Hugging Face")))
         self.result_list.clear(); self.quant_list.clear(); self.details = None
         self.detail.setHtml(self.welcome_html())
         self.update_buttons()
@@ -227,6 +228,8 @@ class SearchTab(QWidget):
             self.search_worker = FunctionWorker(ms.search_github, self.query.text())
         elif self.source.currentIndex() == 2:
             self.search_worker = FunctionWorker(ms.search_modelscope, self.query.text())
+        elif self.source.currentIndex() == 3:
+            self.search_worker = FunctionWorker(ms.search_civitai, self.query.text())
         else:
             self.search_worker = FunctionWorker(
                 ms.search_hf, self.query.text(), ms.CATEGORIES[self.category.currentText()],
@@ -245,11 +248,14 @@ class SearchTab(QWidget):
         self.result_list.clear()
         github = self.source.currentIndex() == 1
         modelscope = self.source.currentIndex() == 2
+        civitai = self.source.currentIndex() == 3
         for m in self.results:
             if github:
                 item = QListWidgetItem(f"🐙 {m['id']}\n      ⭐ {ms.human_number(m['downloads'])} · {m.get('description','')[:100]}")
             elif modelscope:
                 item = QListWidgetItem(f"🌏 {m['id']}\n      ⬇ {ms.human_number(m['downloads'])} · {m.get('description','')[:100]}")
+            elif civitai:
+                item = QListWidgetItem(f"🎨 {m['name']} · {m.get('type','')}\n      ⬇ {ms.human_number(m['downloads'])} · {m['author']}")
             else:
                 lock = " 🔒" if m["gated"] else ""
                 kind = "🖼️ " if m["pipeline"] == "image-text-to-text" else ""
@@ -274,7 +280,7 @@ class SearchTab(QWidget):
         self.quant_list.clear()
         self.detail.setHtml(f"<h2>{html.escape(repo)}</h2><p>⏳ Chargement de la fiche…</p>")
         self.update_buttons()
-        detail_fn = ms.github_details if self.source.currentIndex() == 1 else (ms.modelscope_details if self.source.currentIndex() == 2 else ms.model_details)
+        detail_fn = ms.github_details if self.source.currentIndex() == 1 else (ms.modelscope_details if self.source.currentIndex() == 2 else (ms.civitai_details if self.source.currentIndex() == 3 else ms.model_details))
         self.detail_worker = FunctionWorker(detail_fn, repo)
         self.detail_worker.done.connect(lambda ok, res, r=rid, rp=repo: self.on_details(r, rp, ok, res))
         self.detail_worker.start()
@@ -304,6 +310,9 @@ class SearchTab(QWidget):
         elif d.get("pipeline") == "modelscope":
             row("Source", "ModelScope · catalogue public")
             row("Dépôt", d["id"])
+        elif d.get("pipeline") == "civitai":
+            row("Source", "Civitai · modèles image")
+            row("Type", d.get("type", ""))
         else:
             row("Auteur", d["author"])
         row("Taille", ms.readable_params(d["params"]) + (" de paramètres" if d["params"] else ""))
@@ -326,7 +335,9 @@ class SearchTab(QWidget):
                  f"Hugging Face, le téléchargement direct peut échouer.</p>") if d["gated"] else ""
         notice = (f"<p style='color:{muted}'>ℹ️ Ce dépôt ModelScope peut contenir des formats Python, Safetensors ou Diffusers. "
                   "Il est consultable ici, mais l'installation automatique dans Ollama nécessite un fichier GGUF.</p>"
-                  if d.get("pipeline") == "modelscope" else "")
+                  if d.get("pipeline") == "modelscope" else (f"<p style='color:{muted}'>🎨 Civitai fournit des modèles d'image, LoRA et embeddings. "
+                  "Ouvrez la fiche pour télécharger le fichier avec l'outil image adapté ; ces fichiers ne sont pas installables dans Ollama.</p>"
+                  if d.get("pipeline") == "civitai" else ""))
         self.detail.setHtml(
             f"<h2>{html.escape(d['id'].split('/')[-1])}</h2>{gated}"
             f"<table cellspacing='0'>{''.join(rows)}</table>"
@@ -375,8 +386,15 @@ class SearchTab(QWidget):
     def open_on_hf(self):
         item = self.result_list.currentItem()
         if item:
-            base = ms.GITHUB_SITE if self.source.currentIndex() == 1 else (ms.MODELSCOPE_SITE if self.source.currentIndex() == 2 else ms.HF_SITE)
-            QDesktopServices.openUrl(QUrl(f"{base}/{item.data(Qt.ItemDataRole.UserRole)}"))
+            if self.source.currentIndex() == 1:
+                url = f"{ms.GITHUB_SITE}/{item.data(Qt.ItemDataRole.UserRole)}"
+            elif self.source.currentIndex() == 2:
+                url = f"{ms.MODELSCOPE_SITE}/{item.data(Qt.ItemDataRole.UserRole)}"
+            elif self.source.currentIndex() == 3:
+                url = f"{ms.CIVITAI_SITE}/{item.data(Qt.ItemDataRole.UserRole)}"
+            else:
+                url = f"{ms.HF_SITE}/{item.data(Qt.ItemDataRole.UserRole)}"
+            QDesktopServices.openUrl(QUrl(url))
 
     # ------------------------------------------------------------ téléchargement
     def start_download(self, name: str, size_text: str = ""):
