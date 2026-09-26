@@ -42,6 +42,7 @@ class SearchTab(QWidget):
         self.dl_worker: Optional[DownloadWorker] = None
         self.github_worker: Optional[FunctionWorker] = None
         self.github_file_worker: Optional[FileDownloadWorker] = None
+        self.civitai_worker: Optional[FileDownloadWorker] = None
         self.request_id = 0
         self.detail_request = 0
         try:
@@ -344,14 +345,14 @@ class SearchTab(QWidget):
             + notice
             + (f"<h3>Présentation (extrait)</h3><p style='color:{muted}'>{excerpt}</p>" if excerpt else ""))
 
-        best = ms.best_quant(d["quants"], self.system_info) if d.get("pipeline") != "github" else next(
+        best = ms.best_quant(d["quants"], self.system_info) if d.get("pipeline") not in ("github", "civitai") else next(
             (q["quant"] for q in d["quants"] if not q["split"]), None)
         installed = set(self.ai_manager.get_available_models())
         self.quant_list.clear()
         for q in reversed(d["quants"]):
             fit = ms.fit_for_size(q["size"], self.system_info)
             icon, fit_title, _ = reg.FIT_LABELS[fit]
-            name = ms.ollama_name(d["id"], q["quant"]) if d.get("pipeline") != "github" else q.get("asset", "")
+            name = ms.ollama_name(d["id"], q["quant"]) if d.get("pipeline") not in ("github", "civitai") else q.get("asset", "")
             extras = []
             if q["quant"] == best:
                 extras.append("⭐ conseillé")
@@ -378,9 +379,10 @@ class SearchTab(QWidget):
 
     def update_buttons(self):
         busy = any(worker is not None and worker.isRunning()
-                   for worker in (self.dl_worker, self.github_worker, self.github_file_worker))
+                   for worker in (self.dl_worker, self.github_worker, self.github_file_worker, self.civitai_worker))
         q = self.selected_quant()
         self.download_btn.setEnabled(bool(q) and not q["split"] and not busy)
+        self.download_btn.setText("⬇ Télécharger pour outil image" if self.details and self.details.get("pipeline") == "civitai" else "⬇ Télécharger cette version")
         self.hf_btn.setEnabled(self.details is not None or self.result_list.currentItem() is not None)
 
     def open_on_hf(self):
@@ -413,6 +415,9 @@ class SearchTab(QWidget):
         q = self.selected_quant()
         if not q or not self.details:
             return
+        if self.details.get("pipeline") == "civitai":
+            self.download_civitai(q)
+            return
         if ms.fit_for_size(q["size"], self.system_info) == "no":
             reply = QMessageBox.question(
                 self, "Version trop grosse",
@@ -442,6 +447,26 @@ class SearchTab(QWidget):
         self.github_file_worker.finished_ok.connect(lambda ok, result, n=name, a=asset:
                                                     self.on_github_file(ok, result, n, a))
         self.github_file_worker.start()
+
+    def download_civitai(self, asset: Dict):
+        self.progress.setVisible(True); self.cancel_btn.setVisible(True); self.progress.setValue(0)
+        self.dl_status.setText(f"⏳ Téléchargement image de {asset.get('asset', '')}…")
+        self.civitai_worker = FileDownloadWorker(ms.download_civitai_file, asset)
+        self.civitai_worker.progress.connect(self.on_file_progress)
+        self.civitai_worker.finished_ok.connect(self.on_civitai_downloaded)
+        self.civitai_worker.start()
+
+    def on_civitai_downloaded(self, ok: bool, result: str):
+        self.civitai_worker = None
+        self.progress.setVisible(False); self.cancel_btn.setVisible(False)
+        if ok:
+            size = Path(result).stat().st_size if Path(result).exists() else 0
+            download_history.record(Path(result).name, "Civitai", result, size)
+            self.dl_status.setText(f"✅ Fichier image téléchargé : {result}")
+            self.refresh_history()
+        else:
+            self.dl_status.setText(f"❌ {result}")
+        self.update_buttons()
 
     def on_file_progress(self, done: int, total: int):
         if total:
@@ -478,6 +503,9 @@ class SearchTab(QWidget):
     def cancel_download(self):
         if self.github_file_worker:
             self.github_file_worker.stop()
+            self.dl_status.setText("⏹ Annulation demandée… le fichier partiel sera conservé pour reprendre.")
+        elif self.civitai_worker:
+            self.civitai_worker.stop()
             self.dl_status.setText("⏹ Annulation demandée… le fichier partiel sera conservé pour reprendre.")
 
     def download_ollama_name(self):

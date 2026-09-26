@@ -84,3 +84,7 @@ La recherche multi-sources inclut maintenant **ModelScope**. Les formats non com
 ## Mise à jour v37
 
 La recherche inclut **Civitai** pour les modèles image, LoRA, VAE et embeddings. Les formats image sont clairement séparés des modèles GGUF installables dans Ollama. Voir [le guide v37](MISE_A_JOUR_v37.md).
+
+## Mise à jour v38
+
+Les fichiers image disponibles sur Civitai peuvent être téléchargés avec progression, annulation et reprise dans un cache séparé d'Ollama. Voir [le guide v38](MISE_A_JOUR_v38.md).

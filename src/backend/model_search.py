@@ -154,10 +154,48 @@ def civitai_details(model_id: str, timeout: int = 20) -> Dict:
     r = requests.get(f"{CIVITAI_API}/{model_id}", timeout=timeout)
     r.raise_for_status()
     item = parse_civitai_listing(r.json())
+    files = []
+    for version in r.json().get("modelVersions", []) or []:
+        for file in version.get("files", []) or []:
+            name = file.get("name", "")
+            if name.lower().endswith((".safetensors", ".ckpt", ".pt", ".pth", ".bin", ".zip")):
+                files.append({"quant": name, "asset": name, "size": int(file.get("sizeKB") or 0) * 1024,
+                              "split": False, "download_url": file.get("downloadUrl", ""),
+                              "version": version.get("name", "")})
     item.update({"license": "", "base_model": "", "architecture": "", "context": 0, "params": 0,
-                 "languages": [], "readme": item.get("description", ""), "quants": [],
+                 "languages": [], "readme": item.get("description", ""), "quants": files,
                  "html_url": f"{CIVITAI_SITE}/{model_id}"})
     return item
+
+
+def download_civitai_file(asset: Dict, timeout: int = 60, on_progress=None, should_stop=None) -> str:
+    from pathlib import Path
+    target_dir = Path.home() / ".ia_manager" / "models" / "image_downloads"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "_", asset.get("asset", "model.bin"))
+    target = target_dir / safe
+    if target.exists() and asset.get("size") and target.stat().st_size == asset["size"]:
+        return str(target)
+    part = target.with_suffix(target.suffix + ".part")
+    current = part.stat().st_size if part.exists() else 0
+    headers = {"Range": f"bytes={current}-"} if current else {}
+    with requests.get(asset["download_url"], stream=True, timeout=timeout, headers=headers) as r:
+        r.raise_for_status()
+        append = current > 0 and r.status_code == 206
+        if not append: current = 0
+        total = current + int(r.headers.get("Content-Length") or asset.get("size") or 0)
+        with part.open("ab" if append else "wb") as out:
+            done = current
+            for chunk in r.iter_content(chunk_size=1024 * 1024):
+                if should_stop and should_stop():
+                    raise InterruptedError("Téléchargement annulé. Relancez pour reprendre.")
+                if chunk:
+                    out.write(chunk); done += len(chunk)
+                    if on_progress: on_progress(done, total)
+    if asset.get("size") and part.stat().st_size != asset["size"]:
+        raise RuntimeError("Téléchargement Civitai incomplet.")
+    part.replace(target)
+    return str(target)
 
 
 def parse_github_listing(item: Dict) -> Dict:
