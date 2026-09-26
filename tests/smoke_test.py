@@ -288,6 +288,46 @@ w.check_tasks()
 tasks.reload()
 print("Onglet Tâches OK :", stored["last_status"][:60])
 
+# ------------------------------------------------------------- Recherche d'IA
+search = w.search_tab
+search.request_id += 1
+search.on_results(search.request_id, True, [
+    {"id": "unsloth/Qwen3-8B-GGUF", "name": "Qwen3-8B-GGUF", "author": "unsloth", "downloads": 1234567,
+     "likes": 321, "updated": "2026-01-30T06:29:38.000Z", "pipeline": "text-generation", "gated": False, "tags": []},
+    {"id": "x/Vision-GGUF", "name": "Vision-GGUF", "author": "x", "downloads": 5, "likes": 0,
+     "updated": "", "pipeline": "image-text-to-text", "gated": True, "tags": []},
+])
+assert search.result_list.count() == 2
+fake_details = {
+    "id": "unsloth/Qwen3-8B-GGUF", "author": "unsloth", "downloads": 5, "likes": 2, "updated": "",
+    "pipeline": "text-generation", "license": "apache-2.0", "base_model": "Qwen/Qwen3-8B",
+    "languages": ["en", "fr"], "architecture": "qwen3", "context": 40960, "params": 8190735360,
+    "gated": True, "readme": "# Titre\n<b>html</b> ![img](x.png)\nTexte",
+    "quants": __import__("src.backend.model_search", fromlist=["x"]).group_gguf_files([
+        {"rfilename": "Qwen3-8B-Q4_K_M.gguf", "size": 5027783488},
+        {"rfilename": "Qwen3-8B-Q8_0.gguf", "size": 8709518144},
+        {"rfilename": "BF16/Qwen3-8B-BF16-00001-of-00002.gguf", "size": 9000000000},
+        {"rfilename": "BF16/Qwen3-8B-BF16-00002-of-00002.gguf", "size": 7000000000}]),
+}
+search.show_details(fake_details)
+assert search.quant_list.count() == 3, search.quant_list.count()
+assert search.selected_quant() is not None, "version conseillée sélectionnée"
+search.quant_list.setCurrentRow(0)
+search.update_buttons()
+search.detail_request += 1
+search.on_details(search.detail_request, "a/b", False, "erreur test")
+search.on_results(search.request_id, False, "pas de réseau")
+search.set_system_info({"vram_gb": 8.0, "ram_gb": 32.0})
+search.query.setText("qwen3")
+search.search()
+loop = QEventLoop()
+search.search_worker.finished.connect(loop.quit)
+QTimer.singleShot(30000, loop.quit)
+loop.exec()
+app.processEvents()
+print("Recherche réelle sur Hugging Face :", search.status.text())
+print("Onglet Recherche OK")
+
 w.close()
 app.processEvents()
 if errors:

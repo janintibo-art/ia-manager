@@ -15,6 +15,7 @@ from src.ui.tabs.connections_tab import ConnectionsTab
 from src.ui.tabs.github_tab import GithubTab
 from src.ui.tabs.models_tab import ModelsTab
 from src.ui.tabs.projects_tab import ProjectsTab, get_project_manager
+from src.ui.tabs.search_tab import SearchTab
 from src.ui.tabs.setup_tab import SetupTab
 from src.ui.tabs.tasks_tab import TasksTab
 from src.ui.workers import ChatWorker
@@ -38,6 +39,7 @@ class MainWindow(QMainWindow):
 
         self.setup_tab = SetupTab()
         self.models_tab = ModelsTab()
+        self.search_tab = SearchTab()
         self.projects_tab = ProjectsTab()
         self.chat_tab = ChatTab()
         self.tasks_tab = TasksTab()
@@ -46,6 +48,7 @@ class MainWindow(QMainWindow):
 
         self.tabs.addTab(self.setup_tab, "⚙️ Analyse")
         self.tabs.addTab(self.models_tab, "📦 Modèles")
+        self.tabs.addTab(self.search_tab, "🔍 Recherche")
         self.tabs.addTab(self.projects_tab, "📁 Projets")
         self.tabs.addTab(self.chat_tab, "💬 Chat")
         self.tabs.addTab(self.tasks_tab, "⏰ Tâches")
@@ -58,6 +61,8 @@ class MainWindow(QMainWindow):
         self.connections_tab.models_changed.connect(self.on_models_changed)
         self.connections_tab.providers_changed.connect(self.on_models_changed)
         self.setup_tab.analysis_done.connect(self.models_tab.set_system_info)
+        self.setup_tab.analysis_done.connect(self.search_tab.set_system_info)
+        self.search_tab.models_changed.connect(self.on_models_changed)
         self.setup_tab.show_model.connect(self.open_model)
 
         # Projets <-> Chat
