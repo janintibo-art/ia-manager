@@ -8,14 +8,14 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from PyQt6.QtCore import QBuffer, QByteArray, QIODevice, Qt, QTimer, QUrl, pyqtSignal
-from PyQt6.QtGui import QDesktopServices, QImage, QKeyEvent, QTextCursor, QTextDocument
+from PyQt6.QtGui import QDesktopServices, QImage, QImageReader, QKeyEvent, QTextCursor, QTextDocument
 from PyQt6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QFileDialog, QHBoxLayout, QInputDialog, QLabel, QMenu,
     QMessageBox, QPlainTextEdit, QPushButton, QTextBrowser, QTextEdit, QVBoxLayout, QWidget,
 )
 
 from src.backend import attachments as att
-from src.backend import code_tools, providers, settings
+from src.backend import code_tools, providers, settings, change_review
 from src.backend import github_tools as gt
 from src.backend import quick_commands as qc
 from src.backend import model_registry as reg
@@ -25,6 +25,7 @@ from src.backend.project_manager import now_iso, slugify
 from src.ui import style
 from src.ui.tabs.projects_tab import get_project_manager
 from src.ui.dialogs import ModelSettingsDialog, QuickCommandsDialog
+from src.ui.change_review_dialog import ChangeReviewDialog
 from src.ui.tabs.github_tab import CommandRunner
 from src.ui.workers import FunctionWorker, StreamWorker
 
@@ -195,6 +196,11 @@ class ChatTab(QWidget):
         self.apply_console.setFixedHeight(120)
         self.apply_console.setVisible(False)
         root.addWidget(self.apply_console)
+        self.restore_code_btn = QPushButton("↶ Restaurer la dernière application de code")
+        self.restore_code_btn.setToolTip("Restaure les fichiers locaux ; ne réécrit pas les commits GitHub.")
+        self.restore_code_btn.setEnabled(bool(settings.get("last_code_backup")))
+        self.restore_code_btn.clicked.connect(self.restore_code)
+        root.addWidget(self.restore_code_btn)
 
         self.attach_bar = QWidget()
         self.attach_layout = QHBoxLayout(self.attach_bar)
@@ -260,7 +266,11 @@ class ChatTab(QWidget):
             if not path or Path(path).is_dir():
                 continue
             try:
+                att.check_size(path)
                 if Path(path).suffix.lower() in att.IMAGE_EXT:
+                    dimensions = QImageReader(path).size()
+                    if dimensions.isValid() and dimensions.width() * dimensions.height() > 16_000_000:
+                        raise ValueError("image trop grande : 16 millions de pixels maximum")
                     img = QImage(path)
                     if img.isNull():
                         raise ValueError("image illisible")
@@ -522,35 +532,77 @@ class ChatTab(QWidget):
                 "Indiquez-le dans l'onglet Projets (champ « Dossier sur ce PC »), ou clonez le dépôt "
                 "depuis l'onglet GitHub, puis réessayez.")
             return
-        st = gt.tool_status()
-        if not st["git"]:
-            QMessageBox.information(self, "Git manquant",
-                                    "Installez Git (onglet GitHub) avant d'appliquer du code au dépôt.")
-            return
-        names = [b["filename"] for b in code_tools.assign_filenames(blocks)]
-        listing = "\n".join(f"• {n}" for n in names)
-        if QMessageBox.question(
-            self, "Appliquer au dépôt",
-            f"Écrire {len(names)} fichier(s) dans :\n{folder}\n\n{listing}\n\n"
-            "Puis commit + push sur GitHub ?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        ) != QMessageBox.StandardButton.Yes:
-            return
         try:
-            code_tools.write_to_folder(blocks, folder)
-        except OSError as e:
-            QMessageBox.warning(self, "Écriture impossible", str(e))
+            review = change_review.prepare(blocks, folder)
+        except (OSError, ValueError) as error:
+            QMessageBox.warning(self, "Aperçu impossible", str(error))
             return
-        message, ok = QInputDialog.getText(self, "Message de commit", "Ce qui a changé :",
-                                           text="Code ajouté depuis le Chat IA Manager")
-        if not ok:
-            self.status.setText(f"💾 Fichiers écrits dans {folder} (non envoyés sur GitHub).")
+        if not review["entries"]:
+            self.status.setText("Les fichiers proposés sont déjà identiques : rien à appliquer.")
+            return
+        dialog = ChangeReviewDialog(review, self)
+        if not dialog.exec():
+            return
+        message = ""
+        if dialog.publish:
+            if not gt.tool_status()["git"]:
+                QMessageBox.information(self, "Git manquant", "Installez Git avant l'envoi au dépôt.")
+                return
+            message, ok = QInputDialog.getText(self, "Message de commit", "Ce qui a changé :",
+                                               text="Code ajouté depuis le Chat IA Manager")
+            if not ok:
+                return  # rien n'a encore été écrit
+        try:
+            backup = change_review.apply(review)
+        except (OSError, ValueError) as error:
+            QMessageBox.warning(self, "Application impossible", str(error))
+            return
+        self.last_code_backup = backup
+        self.restore_code_btn.setEnabled(True)
+        try:
+            settings.set("last_code_backup", backup)
+        except OSError:
+            QMessageBox.warning(self, "Sauvegarde conservée", "Le raccourci n'a pas pu être enregistré. "
+                                "La sauvegarde reste disponible ici :\n" + backup)
+        if not dialog.publish:
+            self.status.setText("Fichiers appliqués localement. Sauvegarde disponible pour revenir en arrière.")
             return
         self.apply_folder = folder
         self.apply_console.clear()
         self.apply_console.setVisible(True)
-        self.status.setText("⏳ Envoi vers le dépôt…")
-        self.apply_runner.run(gt.pc_steps("commit_push", message=message.strip() or "Mise à jour"), folder)
+        self.restore_code_btn.setEnabled(False)
+        self.status.setText("⏳ Envoi des fichiers vérifiés vers le dépôt…")
+        names = [entry["name"] for entry in review["entries"]]
+        self.apply_runner.run(change_review.commit_steps(names, message.strip() or "Mise à jour"), folder)
+
+    def restore_code(self):
+        if self.apply_runner.busy():
+            return
+        backup = getattr(self, "last_code_backup", "") or settings.get("last_code_backup")
+        if not backup:
+            return
+        try:
+            import json
+            manifest = json.loads((Path(backup) / "manifest.json").read_text(encoding="utf-8"))
+            listing = "\n".join(entry["name"] for entry in manifest["files"])
+            prompt = (f"Restaurer les fichiers locaux dans :\n{manifest['root']}\n\n{listing}\n\n"
+                      "Les nouveaux fichiers seront supprimés. Les fichiers modifiés depuis l'application "
+                      "bloqueront la restauration. Les commits déjà envoyés sur GitHub restent en place.")
+            if QMessageBox.question(self, "Restaurer la sauvegarde", prompt,
+                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                                    ) != QMessageBox.StandardButton.Yes:
+                return
+            folder = change_review.restore(backup)
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            QMessageBox.warning(self, "Restauration impossible", str(error))
+            return
+        self.last_code_backup = ""
+        self.restore_code_btn.setEnabled(False)
+        try:
+            settings.set("last_code_backup", "")
+        except OSError:
+            pass
+        self.status.setText(f"Fichiers restaurés dans {folder}. Aucun envoi GitHub effectué.")
 
     def on_apply_output(self, text: str):
         self.apply_console.moveCursor(QTextCursor.MoveOperation.End)
@@ -558,6 +610,7 @@ class ChatTab(QWidget):
         self.apply_console.moveCursor(QTextCursor.MoveOperation.End)
 
     def on_apply_done(self, code: int):
+        self.restore_code_btn.setEnabled(bool(getattr(self, "last_code_backup", "") or settings.get("last_code_backup")))
         if code == 0:
             self.status.setText(f"✅ Code envoyé sur GitHub depuis {self.apply_folder}.")
         else:

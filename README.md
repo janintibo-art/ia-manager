@@ -32,3 +32,7 @@ Ce module lance l'outil officiel ; il ne transforme pas directement les modèles
 GitHub Actions exécute les tests de régression, le test de démarrage hors écran puis PyInstaller, avant de publier l'exécutable. Les tests utilisent un profil temporaire.
 
 L'[analyse v22](ANALYSE_v22.md) décrit les corrections, les problèmes restants et les prochaines améliorations proposées.
+
+## Mise à jour v23
+
+Le Chat propose un aperçu des différences avant d'appliquer du code, une sauvegarde automatique et un bouton pour restaurer la dernière application. L'envoi GitHub est limité aux fichiers de l'aperçu. Les pièces jointes disposent de limites de lecture avant décompression. Voir [le guide v23](MISE_A_JOUR_v23.md) pour les détails et les limites.
