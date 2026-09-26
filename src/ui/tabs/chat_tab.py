@@ -19,7 +19,7 @@ from src.backend import code_tools, providers, settings, change_review
 from src.backend import github_tools as gt
 from src.backend import quick_commands as qc
 from src.backend import model_registry as reg
-from src.backend import web_tools, project_memory, model_options
+from src.backend import web_tools, project_memory, model_options, chat_history
 from src.backend.ai_manager import AIManager
 from src.backend.project_manager import now_iso, slugify
 from src.ui import style
@@ -202,10 +202,14 @@ class ChatTab(QWidget):
         self.context_label = QLabel("Contexte : 0 token")
         context_row.addWidget(self.context_label)
         self.compact_btn = QPushButton("Réduire l’historique")
-        self.compact_btn.setToolTip("Conserve les derniers échanges et remplace les anciens par un repère.")
+        self.compact_btn.setToolTip("Sauvegarde les échanges sur disque puis conserve un mémo et les derniers échanges.")
         self.compact_btn.clicked.connect(self.compact_history)
         self.compact_btn.setEnabled(False)
         context_row.addWidget(self.compact_btn)
+        archive_btn = QPushButton("Ouvrir les archives")
+        archive_btn.setToolTip("Retrouver les historiques complets sauvegardés avant réduction")
+        archive_btn.clicked.connect(self.open_history_archives)
+        context_row.addWidget(archive_btn)
         root.addLayout(context_row)
         self.hint = QLabel()
         self.hint.setObjectName("Muted")
@@ -527,24 +531,47 @@ class ChatTab(QWidget):
         self.compact_btn.setEnabled(len(self.messages) >= 8 or ratio >= .75)
         return tokens
 
+    def history_archive_folder(self):
+        if self.project_id:
+            return Path(self.pm.project_folder(self.project_id)) / "archives_chat"
+        return Path.home() / ".ia_manager" / "archives_chat"
+
+    def open_history_archives(self):
+        try:
+            folder = self.history_archive_folder()
+            folder.mkdir(parents=True, exist_ok=True)
+            if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder.resolve()))):
+                self.status.setText(f"Archives : {folder}")
+        except OSError as error:
+            self.status.setText(f"Impossible d’ouvrir les archives : {error}")
+
     def compact_history(self):
+        if ((self.worker is not None and self.worker.isRunning()) or
+                (self.web_worker is not None and self.web_worker.isRunning()) or self.attachment_loading):
+            self.status.setText("Attendez la fin de l’opération en cours avant de réduire l’historique.")
+            return
         if len(self.messages) < 8:
             return
-        keep = 6
-        old = self.messages[:-keep]
-        first = next((m.get("display", m.get("content", "")) for m in old if m.get("role") == "user"), "")
-        marker = {"role": "system", "content": f"Historique précédent condensé localement ({len(old)} messages). Première demande : {first[:240]}"}
-        self.messages = [marker] + self.messages[-keep:]
+        try:
+            reduced, archive = chat_history.archive_and_compact(
+                self.messages, self.history_archive_folder(),
+                {"project_id": self.project_id, "conversation_id": self.conv_id,
+                 "model": self.current_ref()})
+        except Exception as error:
+            self.status.setText(f"Réduction annulée, historique conservé : {error}")
+            return
+        self.messages = reduced
         self.chat_display.clear()
-        self.system_message("🧹 Historique ancien réduit pour libérer du contexte.")
+        self.system_message("Historique complet sauvegardé sur disque. Un mémo et les derniers échanges restent dans le contexte.")
         for index in range(1, len(self.messages)):
             self.render_message(index, self.stream_ref or self.current_ref())
         self.estimate_context()
         try:
             self.save_current(self.current_ref())
-        except Exception:
-            pass
-        self.status.setText("Historique réduit : les derniers échanges sont conservés.")
+        except Exception as error:
+            self.status.setText(f"Archive créée dans {archive}, mais sauvegarde de la discussion impossible : {error}")
+            return
+        self.status.setText(f"Historique archivé : {archive} · mémo conservé pour l’IA.")
 
     def render_message(self, index: int, model_ref: str):
         m = self.messages[index]
