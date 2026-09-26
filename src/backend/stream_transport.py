@@ -69,6 +69,8 @@ def stream(ref, messages, system="", on_token=None, should_stop=None):
                 provider = pv.get_provider(pid)
                 if not provider or not pv.is_configured(provider):
                     raise ValueError(f"Fournisseur {pid} absent ou non configuré.")
+                if pv.offline_mode() and not pv.is_local_url(provider.get("base_url", "")):
+                    raise ValueError("Mode hors ligne actif : fournisseur distant bloqué.")
                 kind, name = provider["kind"], provider["name"]
                 base, headers = provider["base_url"].rstrip("/"), pv._headers(provider)
                 if kind == "anthropic":

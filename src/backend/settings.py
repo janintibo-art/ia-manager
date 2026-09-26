@@ -24,6 +24,7 @@ DEFAULTS: Dict[str, Any] = {
     "web_search": False,
     "brave_key": "",
     "searxng_url": "",
+    "offline_mode": False,
 }
 
 

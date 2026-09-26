@@ -52,3 +52,7 @@ Deux profils spécialisés sont disponibles : **Architecte Code** et **Directeur
 ## Mise à jour v29
 
 Optimisations de performance : caches partagés pour Ollama, réglages relus seulement si nécessaire, index documentaire SQLite en WAL et bouton de vidage des caches IA. Voir [le guide v29](MISE_A_JOUR_v29.md).
+
+## Mise à jour v30
+
+Le **mode hors ligne** bloque les services distants et la recherche web tout en laissant les moteurs locaux disponibles. Un bouton exporte aussi un diagnostic JSON sans clés API, URL, prompts ni conversations. Voir [le guide v30](MISE_A_JOUR_v30.md).

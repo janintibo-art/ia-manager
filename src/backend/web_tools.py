@@ -124,6 +124,8 @@ def search_brave(query: str, n: int, key: str) -> List[Dict]:
 def search(query: str, n: int = 5) -> Tuple[List[Dict], str]:
     """(résultats, nom du moteur utilisé)"""
     query = (query or "").strip()[:300]
+    if settings.get("offline_mode"):
+        return [], "Hors ligne"
     if not query:
         return [], ""
     brave = (settings.get("brave_key") or "").strip()

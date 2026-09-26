@@ -18,6 +18,15 @@ import requests
 from src.backend import settings
 
 SEP = "::"
+
+
+def offline_mode() -> bool:
+    return bool(settings.get("offline_mode"))
+
+
+def is_local_url(url: str) -> bool:
+    from urllib.parse import urlparse
+    return urlparse(url).hostname in ("localhost", "127.0.0.1", "::1")
 OLLAMA_URL = "http://localhost:11434"
 
 BUILTIN = [
@@ -162,6 +171,8 @@ def _error_text(r: requests.Response) -> str:
 
 def fetch_models(p: Dict) -> List[str]:
     """Liste des modèles proposés par le fournisseur (lève une exception en cas d'échec)"""
+    if offline_mode() and not is_local_url(p.get("base_url", "")):
+        raise RuntimeError("Mode hors ligne actif : service distant bloqué.")
     url = p["base_url"].rstrip("/") + "/models"
     if p["kind"] == "anthropic":
         url += "?limit=100"
@@ -279,6 +290,8 @@ def chat(ref: str, messages: List[Dict], system: str = "") -> str:
     p = get_provider(pid)
     if not p:
         return f"Erreur : fournisseur « {pid} » introuvable (onglet Connexions)."
+    if offline_mode() and not is_local_url(p.get("base_url", "")):
+        return "Erreur : mode hors ligne actif ; ce fournisseur distant est bloqué."
     if not is_configured(p):
         return f"Erreur : {p['name']} n'est pas configuré (onglet Connexions)."
     return chat_remote(p, model, messages, system)

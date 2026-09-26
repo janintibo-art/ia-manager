@@ -5,13 +5,13 @@ from typing import Dict, List, Optional
 from PyQt6.QtCore import Qt, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
-    QComboBox, QFileDialog, QFormLayout, QFrame, QHBoxLayout, QLabel, QLineEdit,
+    QCheckBox, QComboBox, QFileDialog, QFormLayout, QFrame, QHBoxLayout, QLabel, QLineEdit,
     QListWidget, QListWidgetItem, QMessageBox, QProgressBar, QPushButton, QScrollArea,
     QVBoxLayout, QWidget,
 )
 
 from src.backend import providers as pv
-from src.backend import settings
+from src.backend import settings, diagnostics
 from src.backend.ai_manager import AIManager
 from src.ui import style
 from src.ui.workers import DownloadWorker, FunctionWorker
@@ -293,6 +293,10 @@ class ConnectionsTab(QWidget):
             "<b>SearXNG</b> donnent des résultats plus fiables, en priorité si renseignées.")
         web_form = QFormLayout()
         web_form.setVerticalSpacing(8)
+        self.offline = QCheckBox("Mode hors ligne : bloquer web et fournisseurs distants")
+        self.offline.setChecked(bool(settings.get("offline_mode")))
+        self.offline.toggled.connect(lambda value: settings.set("offline_mode", value))
+        web_form.addRow(self.offline)
         self.brave_key = QLineEdit(settings.get("brave_key") or "")
         self.brave_key.setEchoMode(QLineEdit.EchoMode.Password)
         self.brave_key.setPlaceholderText("Collez ici votre clé API Brave Search (facultatif)")
@@ -309,6 +313,9 @@ class ConnectionsTab(QWidget):
         web_save.setObjectName("Primary")
         web_save.clicked.connect(self.save_web_settings)
         web_row.addWidget(web_save)
+        diag = QPushButton("📋 Exporter un diagnostic sans secrets")
+        diag.clicked.connect(self.export_diagnostic)
+        web_row.addWidget(diag)
         web_row.addStretch()
         lay.addLayout(web_row)
         self.web_status = QLabel()
@@ -318,6 +325,13 @@ class ConnectionsTab(QWidget):
         root.addWidget(box)
 
         root.addStretch()
+
+    def export_diagnostic(self):
+        try:
+            path = diagnostics.export()
+            self.web_status.setText(f"✅ Diagnostic créé sans clés API ni conversations : {path}")
+        except Exception as error:
+            self.web_status.setText(f"❌ Diagnostic impossible : {error}")
 
     def save_web_settings(self):
         settings.set("brave_key", self.brave_key.text().strip())
