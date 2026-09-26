@@ -1,5 +1,7 @@
 """Tâches en arrière-plan (pour ne pas figer la fenêtre)"""
 
+from typing import Dict, List
+
 from PyQt6.QtCore import QThread, pyqtSignal
 
 
@@ -21,14 +23,15 @@ class DownloadWorker(QThread):
 
 
 class ChatWorker(QThread):
-    """Interroge l'IA"""
+    """Interroge l'IA avec l'historique et les consignes du projet"""
     answered = pyqtSignal(str)
 
-    def __init__(self, ai_manager, model, message):
+    def __init__(self, ai_manager, model: str, messages: List[Dict], system: str = ""):
         super().__init__()
         self.ai_manager = ai_manager
         self.model = model
-        self.message = message
+        self.messages = [dict(m) for m in messages]
+        self.system = system
 
     def run(self):
-        self.answered.emit(self.ai_manager.chat(self.model, self.message))
+        self.answered.emit(self.ai_manager.chat_messages(self.model, self.messages, self.system))

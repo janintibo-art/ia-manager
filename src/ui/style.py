@@ -118,7 +118,7 @@ QPushButton#Chip:checked {{
     color: white;
 }}
 
-QListWidget, QTextEdit, QTextBrowser, QComboBox, QTableWidget {{
+QListWidget, QTextEdit, QTextBrowser, QComboBox, QTableWidget, QLineEdit, QPlainTextEdit {{
     background-color: {SURFACE};
     border: 1px solid {BORDER};
     border-radius: 10px;
@@ -138,8 +138,32 @@ QListWidget::item:hover {{
     background-color: {SURFACE_2};
 }}
 
-QComboBox {{
+QComboBox, QLineEdit {{
     padding: 8px 12px;
+}}
+QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {{
+    border: 1px solid {ACCENT};
+}}
+QPlainTextEdit#Console {{
+    background-color: #0d0e12;
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: {BASE_FONT_PT - 1}pt;
+}}
+QLabel#Command {{
+    background-color: #0d0e12;
+    border: 1px solid {BORDER};
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: {BASE_FONT_PT - 1}pt;
+}}
+QCheckBox {{
+    spacing: 8px;
+    background: transparent;
+}}
+QTabWidget#SubTabs QTabBar::tab {{
+    padding: 8px 18px;
+    font-size: {BASE_FONT_PT}pt;
 }}
 QComboBox QAbstractItemView {{
     background-color: {SURFACE};

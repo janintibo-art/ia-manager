@@ -27,6 +27,16 @@ CATEGORIES: Dict[str, Dict[str, str]] = {
         "desc": "Très petits modèles pour PC modestes, portables ou sans carte graphique. "
                 "Rapides mais moins précis.",
     },
+    "lang": {
+        "label": "🌍 Langues",
+        "desc": "Traduction et usage multilingue : traduire des textes, écrire dans d'autres langues, "
+                "échanger avec des personnes qui ne parlent pas français.",
+    },
+    "special": {
+        "label": "🧰 Spécialisés",
+        "desc": "Modèles entraînés pour un seul métier : maths, bases de données SQL, médecine, "
+                "extraction d'informations, conversion de pages web.",
+    },
 }
 
 # size_gb : taille du téléchargement ≈ mémoire occupée par le modèle.
@@ -237,6 +247,230 @@ MODELS: List[Dict] = [
      "ideal": "Petits calculs et logique sur PC modeste."},
 ]
 
+def _m(id, name, category, editor, params, size_gb, quality, french, context, desc,
+       strengths, weaknesses, ideal, discovery=True):
+    return {"id": id, "name": name, "category": category, "editor": editor, "params": params,
+            "size_gb": size_gb, "quality": quality, "french": french, "context": context,
+            "desc": desc, "strengths": strengths, "weaknesses": weaknesses, "ideal": ideal,
+            "discovery": discovery}
+
+
+# Modèles moins connus (badge « Découverte »), noms et tailles vérifiés sur ollama.com
+MODELS += [
+    # ---------------- Discussion ----------------
+    _m("granite4:micro", "Granite 4 Micro", "chat", "IBM", "3 milliards", 2.1, 2, 2, "128k",
+       "Petit modèle d'IBM pensé pour les entreprises : suit très bien les consignes et sait utiliser des outils.",
+       ["Obéit précisément aux consignes", "Léger", "Licence très libre (Apache 2.0)"],
+       ["Style un peu sec"], "Assistant qui doit respecter des règles précises."),
+    _m("granite3.3:8b", "Granite 3.3 8B", "chat", "IBM", "8 milliards", 4.9, 3, 2, "128k",
+       "Modèle professionnel d'IBM, sérieux et fiable, avec un mode réflexion.",
+       ["Réponses sobres et fiables", "Bon pour résumer des documents"],
+       ["Peu créatif"], "Usage professionnel, résumés, e-mails."),
+    _m("falcon3:10b", "Falcon 3 10B", "chat", "TII (Émirats)", "10 milliards", 6.3, 3, 2, "32k",
+       "Modèle de l'institut TII d'Abu Dhabi, bon en sciences et en maths pour sa taille.",
+       ["Bon en maths et sciences", "Bonne vitesse"],
+       ["Français correct sans plus"], "Questions scientifiques avec une carte de 8 Go."),
+    _m("olmo2:13b", "OLMo 2 13B", "chat", "Allen Institute (AI2)", "13 milliards", 8.4, 3, 1, "4k",
+       "Modèle 100 % ouvert : données d'entraînement, code et poids publiés. Idéal pour la transparence.",
+       ["Entièrement ouvert et documenté", "Bonne qualité générale"],
+       ["Contexte court (4k)", "Surtout en anglais"], "Recherche, curiosité, usage éthique."),
+    _m("tulu3:8b", "Tülu 3 8B", "chat", "Allen Institute (AI2)", "8 milliards", 3, 3, 2, "128k",
+       "Version de Llama retravaillée par AI2 pour mieux suivre les instructions.",
+       ["Suit bien les consignes", "Recette d'entraînement publique"],
+       ["Moins connu, moins de retours d'utilisateurs"], "Assistant général alternatif à Llama."),
+    _m("hermes3:8b", "Hermes 3 8B", "chat", "Nous Research", "8 milliards", 4.7, 3, 2, "128k",
+       "Modèle communautaire réputé pour le jeu de rôle, l'écriture créative et les longues conversations.",
+       ["Très bon en écriture créative", "Garde bien un personnage", "Suit les consignes système"],
+       ["Moins rigoureux sur les faits"], "Histoires, jeux de rôle, personnages."),
+    _m("dolphin3:8b", "Dolphin 3 8B", "chat", "Cognitive Computations", "8 milliards", 4.9, 3, 2, "128k",
+       "Modèle très « obéissant » : il suit les consignes du projet sans ajouter de morale ni de refus inutiles.",
+       ["Respecte fidèlement les consignes", "Bon pour le code et les agents"],
+       ["C'est à vous de cadrer son comportement"], "Assistant entièrement piloté par vos consignes."),
+    _m("exaone3.5:7.8b", "EXAONE 3.5 7.8B", "chat", "LG AI Research", "7,8 milliards", 4.8, 3, 1, "32k",
+       "Modèle de LG, bilingue anglais/coréen, bon en suivi d'instructions longues.",
+       ["Bon sur les longs documents", "Rigoureux"],
+       ["Français faible"], "Documents longs en anglais."),
+    _m("cogito:14b", "Cogito 14B", "chat", "Deep Cogito", "14 milliards", 9.0, 4, 2, "128k",
+       "Modèle hybride : répond directement ou réfléchit longuement selon la difficulté.",
+       ["Deux modes (rapide / réflexion)", "Très bon niveau"],
+       ["Demande 12 Go de VRAM pour être rapide"], "Assistant polyvalent qui sait aussi raisonner."),
+    _m("lfm2:24b", "LFM2 24B", "chat", "Liquid AI", "24 milliards (2 actifs)", 14.0, 4, 2, "32k",
+       "Architecture originale : seulement 2 milliards de paramètres travaillent à chaque mot, "
+       "il est donc rapide même en partie en RAM.",
+       ["Rapide pour sa taille", "Fonctionne bien sur processeur"],
+       ["14 Go de mémoire nécessaire"], "PC avec beaucoup de RAM mais une petite carte graphique."),
+    _m("gemma3n:e4b", "Gemma 3n E4B", "chat", "Google", "8 milliards (4 effectifs)", 7.5, 3, 3, "32k",
+       "Version de Gemma conçue pour les téléphones et portables, très économe en calcul.",
+       ["Économe", "Bon français"],
+       ["Fichier plus gros que sa puissance"], "Portables et PC sans grosse carte graphique."),
+
+    # ---------------- Code ----------------
+    _m("starcoder2:7b", "StarCoder2 7B", "code", "BigCode (Hugging Face)", "7 milliards", 4.0, 3, 1, "16k",
+       "Modèle de complétion de code entraîné sur plus de 600 langages de programmation.",
+       ["Énormément de langages", "Complétion rapide"],
+       ["Ne discute pas, il complète du code"], "Autocomplétion dans un éditeur."),
+    _m("codegemma:7b", "CodeGemma 7B", "code", "Google", "7 milliards", 5.0, 3, 2, "8k",
+       "Version de Gemma spécialisée en programmation.",
+       ["Bon en Python et JavaScript", "Explications claires"],
+       ["Contexte court (8k)"], "Petits scripts et explications de code."),
+    _m("yi-coder:9b", "Yi-Coder 9B", "code", "01.AI", "9 milliards", 5.0, 4, 1, "128k",
+       "Modèle de code performant avec un très long contexte : il peut lire de gros fichiers.",
+       ["Long contexte", "52 langages"],
+       ["Répond surtout en anglais"], "Travailler sur de gros fichiers de code."),
+    _m("opencoder:8b", "OpenCoder 8B", "code", "INF / M-A-P", "8 milliards", 4.7, 3, 1, "8k",
+       "Modèle de code entièrement ouvert, données d'entraînement comprises.",
+       ["Transparent", "Bon en Python"],
+       ["Contexte court"], "Programmation Python, projets open source."),
+    _m("granite-code:8b", "Granite Code 8B", "code", "IBM", "8 milliards", 4.6, 3, 1, "128k",
+       "Modèle de code d'IBM, entraîné uniquement sur du code à licence libre.",
+       ["Sans risque de licence", "Bon en Java et SQL"],
+       ["Moins fort que Qwen Coder"], "Code professionnel, projets d'entreprise."),
+    _m("deepcoder:14b", "DeepCoder 14B", "code", "Agentica", "14 milliards", 9.0, 4, 1, "64k",
+       "Modèle de code qui réfléchit avant d'écrire : très bon sur les problèmes d'algorithmique.",
+       ["Excellent en algorithmique", "Raisonne sur le code"],
+       ["Lent (réflexion longue)"], "Exercices de programmation difficiles."),
+    _m("codestral:22b", "Codestral 22B", "code", "Mistral AI", "22 milliards", 13.0, 4, 3, "32k",
+       "Le modèle de code de Mistral AI, fort en complétion et bon en français.",
+       ["80 langages", "Bon français", "Complétion au milieu du code"],
+       ["Licence non commerciale"], "Développement avec explications en français."),
+    _m("qwen3-coder:30b", "Qwen3 Coder 30B", "code", "Alibaba", "30 milliards (3 actifs)", 19.0, 5, 2, "256k",
+       "Le modèle de code récent d'Alibaba, rapide grâce à son architecture « mixture of experts ».",
+       ["Niveau très élevé", "Rapide pour sa taille", "Très long contexte"],
+       ["20 Go de mémoire nécessaires"], "Agents de code et gros projets.", discovery=False),
+
+    # ---------------- Raisonnement ----------------
+    _m("smallthinker:3b", "SmallThinker 3B", "reasoning", "PowerInfer", "3 milliards", 3.6, 2, 1, "32k",
+       "Petit modèle qui réfléchit étape par étape, basé sur Qwen 2.5.",
+       ["Raisonnement sur petit PC"],
+       ["Se perd sur les problèmes longs"], "Découvrir le raisonnement sans GPU."),
+    _m("phi4-mini-reasoning:3.8b", "Phi-4 Mini Reasoning", "reasoning", "Microsoft", "3,8 milliards", 3.2, 3, 1, "128k",
+       "Petit modèle de Microsoft spécialisé dans les maths étape par étape.",
+       ["Très bon en maths pour sa taille", "Léger"],
+       ["Limité hors maths"], "Maths sur un PC modeste."),
+    _m("openthinker:7b", "OpenThinker 7B", "reasoning", "Open Thoughts", "7 milliards", 4.7, 3, 1, "32k",
+       "Modèle de raisonnement communautaire entraîné sur des données ouvertes.",
+       ["Données publiques", "Bon en maths et code"],
+       ["Surtout en anglais"], "Alternative ouverte à DeepSeek R1."),
+    _m("exaone-deep:7.8b", "EXAONE Deep 7.8B", "reasoning", "LG AI Research", "7,8 milliards", 4.8, 3, 1, "32k",
+       "Version « réflexion » du modèle de LG, bonne en maths et en sciences.",
+       ["Bon en maths", "Rigoureux"],
+       ["Français faible"], "Problèmes scientifiques."),
+    _m("marco-o1:7b", "Marco-o1 7B", "reasoning", "Alibaba (AIDC)", "7 milliards", 4.7, 3, 2, "32k",
+       "Modèle de raisonnement expérimental qui explore plusieurs pistes avant de conclure.",
+       ["Explore plusieurs solutions", "Bon en traduction nuancée"],
+       ["Expérimental"], "Questions ouvertes à plusieurs réponses possibles."),
+    _m("phi4-reasoning:14b", "Phi-4 Reasoning 14B", "reasoning", "Microsoft", "14 milliards", 11.0, 4, 2, "32k",
+       "Version « réflexion » de Phi-4, rivalise avec des modèles bien plus gros en maths.",
+       ["Excellent en maths et logique"],
+       ["Réflexions très longues"], "Problèmes difficiles avec une carte de 12-16 Go."),
+    _m("magistral:24b", "Magistral 24B", "reasoning", "Mistral AI", "24 milliards", 14.0, 5, 3, "40k",
+       "Le modèle de raisonnement de Mistral AI, qui réfléchit directement en français.",
+       ["Raisonne en français", "Très bon niveau"],
+       ["16 Go de VRAM conseillés"], "Raisonnement poussé en français."),
+    _m("gpt-oss:20b", "GPT-OSS 20B", "reasoning", "OpenAI", "20 milliards (MoE)", 14.0, 5, 3, "128k",
+       "Le modèle ouvert d'OpenAI : raisonnement réglable (faible, moyen, fort) et bon en outils.",
+       ["Très bon niveau", "Rapide pour sa taille", "Bon français"],
+       ["16 Go de mémoire nécessaires"], "Assistant qui raisonne, sur un bon PC.", discovery=False),
+
+    # ---------------- Images ----------------
+    _m("qwen3-vl:4b", "Qwen3 VL 4B", "vision", "Alibaba", "4 milliards", 3.3, 3, 3, "256k",
+       "Petit modèle de vision récent : photos, captures d'écran, documents.",
+       ["Léger", "Bon français", "Lit bien le texte dans les images"],
+       ["Moins précis que la 8B"], "Vision sur un PC modeste.", discovery=False),
+    _m("qwen3-vl:8b", "Qwen3 VL 8B", "vision", "Alibaba", "8 milliards", 6.1, 5, 3, "256k",
+       "Le modèle de vision le plus puissant de la famille Qwen dans cette taille.",
+       ["Excellente compréhension d'image", "Bon français", "Très long contexte"],
+       ["8 Go de VRAM conseillés"], "Meilleur choix vision pour une carte de 8 Go.", discovery=False),
+    _m("granite3.2-vision:2b", "Granite 3.2 Vision 2B", "vision", "IBM", "2 milliards", 2.4, 3, 1, "16k",
+       "Petit modèle d'IBM spécialisé dans les documents : tableaux, graphiques, formulaires.",
+       ["Très bon sur les documents", "Léger"],
+       ["Peu doué pour les photos"], "Lire des tableaux et graphiques."),
+    _m("glm-ocr:latest", "GLM-OCR", "vision", "Zhipu AI", "moins d'1 milliard", 2.2, 4, 2, "8k",
+       "Modèle dédié à la reconnaissance de texte (OCR) dans des documents complexes.",
+       ["Excellent OCR", "Mises en page complexes"],
+       ["Ne fait que de l'OCR"], "Numériser factures, courriers, documents scannés."),
+    _m("llava-phi3:3.8b", "LLaVA Phi-3", "vision", "LLaVA / Microsoft", "3,8 milliards", 2.9, 2, 1, "4k",
+       "Petite version de LLaVA basée sur Phi-3.",
+       ["Léger"], ["Surtout en anglais", "Descriptions simples"], "Décrire des images sur petit PC."),
+    _m("llava-llama3:8b", "LLaVA Llama 3", "vision", "LLaVA / Meta", "8 milliards", 5.5, 3, 2, "8k",
+       "LLaVA reconstruit sur Llama 3, plus précis que l'original.",
+       ["Descriptions détaillées"], ["Contexte court"], "Analyse de photos."),
+
+    # ---------------- Légers ----------------
+    _m("smollm2:1.7b", "SmolLM2 1.7B", "light", "Hugging Face", "1,7 milliard", 1.8, 2, 1, "8k",
+       "Petit modèle de Hugging Face, étonnamment capable pour sa taille.",
+       ["Très léger", "Bon en anglais"], ["Français faible"], "Vieux PC, tâches simples."),
+    _m("smollm2:360m", "SmolLM2 360M", "light", "Hugging Face", "360 millions", 0.73, 1, 1, "8k",
+       "Micro-modèle : tient dans moins d'1 Go.",
+       ["Instantané", "Tourne partout"], ["Très limité"], "Tests, reformulations très simples."),
+    _m("tinyllama:1.1b", "TinyLlama 1.1B", "light", "TinyLlama", "1,1 milliard", 0.64, 1, 1, "2k",
+       "Petit Llama communautaire, pionnier des mini-modèles.",
+       ["Minuscule"], ["Dépassé par les récents"], "Curiosité, très vieux PC."),
+    _m("granite4:350m", "Granite 4 350M", "light", "IBM", "350 millions", 0.71, 1, 1, "32k",
+       "Le plus petit Granite, pour les appareils très limités.",
+       ["Ultra léger", "Suit des consignes simples"], ["Très limité"], "Classement ou tri de textes courts."),
+    _m("stablelm2:1.6b", "StableLM 2 1.6B", "light", "Stability AI", "1,6 milliard", 0.98, 1, 2, "4k",
+       "Petit modèle entraîné en 7 langues européennes, dont le français.",
+       ["Français correct pour sa taille", "Très léger"], ["Réponses courtes"], "Petit assistant en français."),
+    _m("qwen2.5:0.5b", "Qwen 2.5 0.5B", "light", "Alibaba", "500 millions", 0.4, 1, 1, "32k",
+       "Le plus petit Qwen : 400 Mo seulement.",
+       ["Le plus léger du catalogue"], ["Très limité"], "Tests et tâches automatiques simples."),
+    _m("exaone3.5:2.4b", "EXAONE 3.5 2.4B", "light", "LG AI Research", "2,4 milliards", 1.6, 2, 1, "32k",
+       "Petit modèle de LG, bon en suivi d'instructions.",
+       ["Léger", "Obéissant"], ["Français faible"], "Tâches guidées sur petit PC."),
+    _m("cogito:3b", "Cogito 3B", "light", "Deep Cogito", "3 milliards", 2.2, 2, 2, "128k",
+       "Petite version de Cogito qui peut basculer en mode réflexion.",
+       ["Mode réflexion sur petit PC"], ["Limité sur les sujets complexes"], "Portable sans carte graphique."),
+
+    # ---------------- Langues ----------------
+    _m("translategemma:4b", "TranslateGemma 4B", "lang", "Google", "4 milliards", 3.3, 3, 3, "128k",
+       "Modèle de traduction de Google, basé sur Gemma 3, pour 55 langues.",
+       ["Spécialisé traduction", "55 langues", "Léger"], ["Ne sert qu'à traduire"], "Traduire des textes au quotidien."),
+    _m("translategemma:12b", "TranslateGemma 12B", "lang", "Google", "12 milliards", 8.1, 4, 3, "128k",
+       "Version plus précise de TranslateGemma, pour des traductions soignées.",
+       ["Traductions de qualité", "55 langues"], ["Demande 10 Go de VRAM"], "Traductions professionnelles."),
+    _m("aya-expanse:8b", "Aya Expanse 8B", "lang", "Cohere", "8 milliards", 5.1, 3, 3, "8k",
+       "Modèle multilingue de Cohere, entraîné pour 23 langues dont le français.",
+       ["Excellent multilingue", "Naturel dans chaque langue"], ["Contexte court"], "Échanges en plusieurs langues."),
+    _m("aya-expanse:32b", "Aya Expanse 32B", "lang", "Cohere", "32 milliards", 20.0, 5, 3, "128k",
+       "Grande version d'Aya : qualité multilingue de haut niveau.",
+       ["Très haute qualité en 23 langues"], ["Carte 24 Go conseillée"], "Traduction et rédaction multilingue exigeantes."),
+    _m("command-r7b:7b", "Command R7B", "lang", "Cohere", "7 milliards", 5.1, 3, 3, "128k",
+       "Modèle de Cohere taillé pour travailler sur vos documents (RAG), multilingue.",
+       ["Cite ses sources", "Multilingue", "Long contexte"], ["Moins créatif"], "Questions sur vos propres documents."),
+    _m("sailor2:8b", "Sailor2 8B", "lang", "Sea AI Lab", "8 milliards", 5.2, 3, 1, "32k",
+       "Spécialisé dans les langues d'Asie du Sud-Est (vietnamien, thaï, indonésien…).",
+       ["Langues d'Asie du Sud-Est"], ["Français faible"], "Communiquer en langues asiatiques."),
+
+    # ---------------- Spécialisés ----------------
+    _m("mathstral:7b", "Mathstral 7B", "special", "Mistral AI", "7 milliards", 4.1, 3, 2, "32k",
+       "Modèle de Mistral AI dédié aux mathématiques et aux sciences.",
+       ["Maths et sciences", "Explique les étapes"], ["Moins bon ailleurs"], "Devoirs de maths, physique."),
+    _m("qwen2-math:7b", "Qwen2 Math 7B", "special", "Alibaba", "7 milliards", 4.4, 4, 1, "4k",
+       "Spécialiste des problèmes de maths, du collège aux concours.",
+       ["Très fort en calcul et algèbre"], ["Contexte court", "Anglais"], "Résoudre des problèmes de maths."),
+    _m("sqlcoder:7b", "SQLCoder 7B", "special", "Defog", "7 milliards", 4.1, 3, 1, "16k",
+       "Transforme une question en requête SQL pour interroger une base de données.",
+       ["Écrit des requêtes SQL"], ["Ne sert qu'au SQL"], "Interroger une base de données."),
+    _m("medgemma:4b", "MedGemma 4B", "special", "Google", "4 milliards", 3.3, 3, 2, "128k",
+       "Gemma 3 entraîné sur des textes et images médicales. Ne remplace pas un médecin.",
+       ["Vocabulaire médical", "Lit des images médicales"], ["Ne remplace pas un avis médical"],
+       "Comprendre un compte rendu médical."),
+    _m("nuextract:3.8b", "NuExtract 3.8B", "special", "NuMind", "3,8 milliards", 2.2, 3, 1, "4k",
+       "Extrait des informations d'un texte vers un format structuré (JSON) : noms, dates, montants…",
+       ["Extraction précise", "Léger"], ["Ne discute pas"], "Remplir un tableau à partir de documents."),
+    _m("reader-lm:1.5b", "Reader-LM 1.5B", "special", "Jina AI", "1,5 milliard", 0.94, 2, 1, "256k",
+       "Convertit une page web (HTML) en texte propre (Markdown).",
+       ["Très léger", "Énorme contexte"], ["Ne fait que la conversion"], "Nettoyer des pages web."),
+]
+
+
+# Modèles à usage unique : visibles dans le catalogue mais jamais « conseillés »
+NICHE_IDS = {"glm-ocr:latest", "starcoder2:7b", "nuextract:3.8b", "reader-lm:1.5b",
+             "sqlcoder:7b", "sailor2:8b", "medgemma:4b"}
+# Catégories présentes dans le tableau de recommandations
+RECO_CATEGORIES = [c for c in CATEGORIES if c != "special"]
+
 FIT_LABELS = {
     "gpu": ("✅", "Rapide", "Tient entièrement dans la carte graphique"),
     "mixed": ("⚠️", "Moyen", "Réparti entre carte graphique et RAM : plus lent"),
@@ -287,9 +521,11 @@ def recommend(info: Dict, priority: str = "Équilibré") -> Dict[str, Optional[D
     vram = info.get("vram_gb", 0.0)
     result: Dict[str, Optional[Dict]] = {}
 
-    for cat in CATEGORIES:
+    for cat in RECO_CATEGORIES:
         candidates = []
         for m in models_in(cat):
+            if m["id"] in NICHE_IDS:
+                continue
             fit = evaluate_fit(m, info)
             if fit == "no":
                 continue

@@ -5,7 +5,7 @@ from typing import Dict, List, Optional
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
-    QButtonGroup, QFrame, QHBoxLayout, QLabel, QListWidget, QListWidgetItem,
+    QFrame, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem,
     QMessageBox, QProgressBar, QPushButton, QSplitter, QTextBrowser,
     QVBoxLayout, QWidget,
 )
@@ -17,6 +17,7 @@ from src.ui import style
 from src.ui.workers import DownloadWorker
 
 INSTALLED_FILTER = "__installed__"
+DISCOVERY_FILTER = "__discovery__"
 
 
 def stars(n: int, total: int = 5) -> str:
@@ -52,46 +53,50 @@ class ModelsTab(QWidget):
         title = QLabel("Catalogue des modèles")
         title.setObjectName("Title")
         root.addWidget(title)
-        subtitle = QLabel("Choisissez une catégorie, puis un modèle pour voir sa fiche. "
+        subtitle = QLabel("Choisissez une catégorie, puis un modèle pour voir sa fiche. 🔍 = modèle moins connu. "
                           "✅ rapide sur ce PC · ⚠️ plus lent · 🐢 lent (sans carte graphique) · ❌ trop gros")
         subtitle.setObjectName("Subtitle")
         subtitle.setWordWrap(True)
         root.addWidget(subtitle)
-
-        # Filtres par catégorie
-        chips = QHBoxLayout()
-        chips.setSpacing(8)
-        self.chip_group = QButtonGroup(self)
-        self.chip_group.setExclusive(True)
-        filters = [(None, "Tous")] + [(k, v["label"]) for k, v in reg.CATEGORIES.items()]
-        filters.append((INSTALLED_FILTER, "✔ Installés"))
-        for key, label in filters:
-            btn = QPushButton(label)
-            btn.setObjectName("Chip")
-            btn.setCheckable(True)
-            btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.clicked.connect(lambda _checked, k=key: self.set_filter(k))
-            self.chip_group.addButton(btn)
-            chips.addWidget(btn)
-            if key is None:
-                btn.setChecked(True)
-        chips.addStretch()
-        refresh_btn = QPushButton("🔄 Actualiser")
-        refresh_btn.clicked.connect(self.refresh_installed_models)
-        chips.addWidget(refresh_btn)
-        root.addLayout(chips)
 
         self.category_desc = QLabel()
         self.category_desc.setObjectName("Muted")
         self.category_desc.setWordWrap(True)
         root.addWidget(self.category_desc)
 
-        # Liste + fiche
+        # Catégories | liste | fiche
         splitter = QSplitter(Qt.Orientation.Horizontal)
 
+        self.category_list = QListWidget()
+        self.category_list.setMinimumWidth(210)
+        self.category_list.setMaximumWidth(270)
+        self.filters = [(None, "📚 Tous")] + [(k, v["label"]) for k, v in reg.CATEGORIES.items()]
+        self.filters += [(DISCOVERY_FILTER, "🔍 Découvertes"), (INSTALLED_FILTER, "✔ Installés")]
+        for key, label in self.filters:
+            item = QListWidgetItem(label)
+            item.setData(Qt.ItemDataRole.UserRole, key)
+            self.category_list.addItem(item)
+        self.category_list.currentRowChanged.connect(self.on_category_changed)
+        splitter.addWidget(self.category_list)
+
+        middle = QWidget()
+        middle_lay = QVBoxLayout(middle)
+        middle_lay.setContentsMargins(0, 0, 0, 0)
+        search_row = QHBoxLayout()
+        self.search = QLineEdit()
+        self.search.setPlaceholderText("🔎 Rechercher (nom, éditeur, usage…)")
+        self.search.setClearButtonEnabled(True)
+        self.search.textChanged.connect(lambda _t: self.populate_list())
+        search_row.addWidget(self.search, 1)
+        refresh_btn = QPushButton("🔄")
+        refresh_btn.setToolTip("Actualiser les modèles installés")
+        refresh_btn.clicked.connect(self.refresh_installed_models)
+        search_row.addWidget(refresh_btn)
+        middle_lay.addLayout(search_row)
         self.model_list = QListWidget()
         self.model_list.currentItemChanged.connect(self.on_item_changed)
-        splitter.addWidget(self.model_list)
+        middle_lay.addWidget(self.model_list, 1)
+        splitter.addWidget(middle)
 
         detail_card = QFrame()
         detail_card.setObjectName("Card")
@@ -127,10 +132,15 @@ class ModelsTab(QWidget):
         detail_layout.addLayout(buttons)
 
         splitter.addWidget(detail_card)
-        splitter.setStretchFactor(0, 2)
-        splitter.setStretchFactor(1, 3)
-        splitter.setSizes([460, 700])
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 2)
+        splitter.setStretchFactor(2, 3)
+        splitter.setSizes([230, 430, 620])
         root.addWidget(splitter, 1)
+
+        self.category_list.blockSignals(True)
+        self.category_list.setCurrentRow(0)
+        self.category_list.blockSignals(False)
 
     # ------------------------------------------------------------ données
     def set_system_info(self, info: Dict):
@@ -138,10 +148,30 @@ class ModelsTab(QWidget):
         self.system_info = info
         self.populate_list()
 
+    def on_category_changed(self, row: int):
+        if 0 <= row < len(self.filters):
+            self.set_filter(self.filters[row][0])
+
+    def update_category_counts(self):
+        for i, (key, label) in enumerate(self.filters):
+            if key is None:
+                n = len(reg.MODELS)
+            elif key == INSTALLED_FILTER:
+                n = len(self.installed)
+            elif key == DISCOVERY_FILTER:
+                n = sum(1 for m in reg.MODELS if m.get("discovery"))
+            else:
+                n = len(reg.models_in(key))
+            self.category_list.item(i).setText(f"{label}  ({n})")
+
     def set_filter(self, key: Optional[str]):
         self.current_filter = key
+        self.update_category_counts()
         if key is None:
             self.category_desc.setText(f"{len(reg.MODELS)} modèles au total, toutes catégories confondues.")
+        elif key == DISCOVERY_FILTER:
+            self.category_desc.setText("Modèles moins connus mais intéressants : petits éditeurs, laboratoires "
+                                       "de recherche, modèles spécialisés. À essayer !")
         elif key == INSTALLED_FILTER:
             self.category_desc.setText("Modèles déjà téléchargés sur ce PC.")
         else:
@@ -162,8 +192,21 @@ class ModelsTab(QWidget):
             for name in self.installed:
                 if name not in known:
                     models.append({"id": name, "name": name, "category": None, "extra": True})
+            return self.apply_search(models)
+        if self.current_filter == DISCOVERY_FILTER:
+            return self.apply_search([m for m in reg.MODELS if m.get("discovery")])
+        return self.apply_search(reg.models_in(self.current_filter))
+
+    def apply_search(self, models: List[Dict]) -> List[Dict]:
+        text = self.search.text().strip().lower() if hasattr(self, "search") else ""
+        if not text:
             return models
-        return reg.models_in(self.current_filter)
+        out = []
+        for m in models:
+            hay = " ".join(str(m.get(k, "")) for k in ("id", "name", "editor", "desc", "ideal"))
+            if text in hay.lower():
+                out.append(m)
+        return out
 
     def populate_list(self):
         keep = self.current_id
@@ -177,6 +220,8 @@ class ModelsTab(QWidget):
             else:
                 icon = reg.FIT_LABELS[reg.evaluate_fit(m, self.system_info)][0]
                 inst = "   ✔ installé" if self.is_installed(m["id"]) else ""
+                if m.get("discovery"):
+                    inst = "  🔍" + inst
                 cat = reg.CATEGORIES[m["category"]]["label"]
                 text = (f"{icon}  {m['name']}{inst}\n"
                         f"      {cat} · {m['params']} · ~{m['size_gb']:.1f} Go")
@@ -203,9 +248,10 @@ class ModelsTab(QWidget):
     def select_model(self, model_id: str):
         """Afficher la fiche d'un modèle précis (depuis l'onglet Analyse)"""
         self.current_id = model_id
-        for btn in self.chip_group.buttons():
-            if btn.text() == "Tous":
-                btn.setChecked(True)
+        self.search.clear()
+        self.category_list.blockSignals(True)
+        self.category_list.setCurrentRow(0)
+        self.category_list.blockSignals(False)
         self.set_filter(None)
 
     # ------------------------------------------------------------ fiche
@@ -269,6 +315,8 @@ class ModelsTab(QWidget):
 
         installed_badge = (f" &nbsp;<span style='color:{style.GREEN}'>✔ installé</span>"
                            if installed else "")
+        if m.get("discovery"):
+            installed_badge += f" &nbsp;<span style='color:{style.ACCENT_HOVER}'>🔍 Découverte</span>"
 
         return f"""
 <h1 style='margin-bottom:0'>{html.escape(m['name'])}</h1>

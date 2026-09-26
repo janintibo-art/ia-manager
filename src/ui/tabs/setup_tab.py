@@ -258,8 +258,9 @@ class SetupTab(QWidget):
         recos = reg.recommend(self.info, self.priority_key())
         busy = self.download_worker is not None and self.download_worker.isRunning()
 
-        self.table.setRowCount(len(reg.CATEGORIES))
-        for row, (cat_key, cat) in enumerate(reg.CATEGORIES.items()):
+        self.table.setRowCount(len(reg.RECO_CATEGORIES))
+        for row, cat_key in enumerate(reg.RECO_CATEGORIES):
+            cat = reg.CATEGORIES[cat_key]
             model = recos.get(cat_key)
             self.table.setItem(row, 0, QTableWidgetItem(cat["label"]))
             if model is None:
