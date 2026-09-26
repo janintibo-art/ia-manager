@@ -140,3 +140,7 @@ Un onglet **📘 Tuto** explique le fonctionnement complet d'IA Manager, les sou
 ## Mise à jour v51
 
 Le tuto dispose de raccourcis pour ouvrir directement Recherche, Connexions, Chat et Espace de travail. Voir [le guide v51](MISE_A_JOUR_v51.md).
+
+## Mise à jour v52
+
+La présentation graphique a été sublimée : bandeau d'identité, repères visuels, cartes, onglets, boutons et états de survol harmonisés dans les thèmes sombre et clair. Voir [le guide v52](MISE_A_JOUR_v52.md).

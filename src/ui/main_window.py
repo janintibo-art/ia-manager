@@ -5,8 +5,8 @@ from typing import Dict, List, Optional, Set
 from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QAction, QFont
 from PyQt6.QtWidgets import (
-    QApplication, QHBoxLayout, QMainWindow, QMenu, QPushButton, QStyle, QSystemTrayIcon, QTabWidget,
-    QVBoxLayout, QWidget,
+    QApplication, QFrame, QHBoxLayout, QMainWindow, QMenu, QPushButton, QStyle, QSystemTrayIcon, QTabWidget,
+    QVBoxLayout, QWidget, QLabel,
 )
 
 from src.backend import code_tools, settings
@@ -117,6 +117,24 @@ class MainWindow(QMainWindow):
         central = QWidget()
         layout = QVBoxLayout(central)
         layout.setContentsMargins(18, 12, 18, 18)
+        hero = QFrame()
+        hero.setObjectName("Hero")
+        hero_lay = QHBoxLayout(hero)
+        hero_lay.setContentsMargins(18, 10, 18, 10)
+        brand = QLabel("IA")
+        brand.setObjectName("BrandAccent")
+        hero_lay.addWidget(brand)
+        brand2 = QLabel(" Manager")
+        brand2.setObjectName("Brand")
+        hero_lay.addWidget(brand2)
+        tagline = QLabel("Votre atelier local pour découvrir, tester et organiser vos IA")
+        tagline.setObjectName("Muted")
+        hero_lay.addWidget(tagline, 1)
+        for text in ("LOCAL", "MULTI-SOURCES", "HORS LIGNE"):
+            pill = QLabel(text)
+            pill.setObjectName("Pill")
+            hero_lay.addWidget(pill)
+        layout.addWidget(hero)
         layout.addWidget(self.tabs)
         self.setCentralWidget(central)
 

@@ -48,6 +48,36 @@ QWidget {{
     font-size: {BASE_FONT_PT}pt;
 }}
 
+QMainWindow {{
+    background-color: {BG};
+}}
+QFrame#Hero {{
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                stop:0 {SURFACE}, stop:0.55 {SURFACE_2}, stop:1 {BG});
+    border: 1px solid {BORDER};
+    border-radius: 16px;
+    padding: 4px;
+}}
+QLabel#Brand {{
+    background: transparent;
+    color: {TEXT};
+    font-size: {BASE_FONT_PT + 9}pt;
+    font-weight: 700;
+}}
+QLabel#BrandAccent {{
+    background: transparent;
+    color: {ACCENT_HOVER};
+    font-size: {BASE_FONT_PT + 9}pt;
+    font-weight: 700;
+}}
+QLabel#Pill {{
+    background-color: {SURFACE_2};
+    color: {TEXT_MUTED};
+    border: 1px solid {BORDER};
+    border-radius: 12px;
+    padding: 5px 10px;
+}}
+
 QLabel#Title {{
     font-size: {BASE_FONT_PT + 7}pt;
     font-weight: 600;
@@ -111,6 +141,7 @@ QPushButton {{
 }}
 QPushButton:hover {{
     border-color: {ACCENT};
+    background-color: {SURFACE_2};
 }}
 QPushButton:disabled {{
     color: {TEXT_MUTED};
@@ -242,6 +273,20 @@ QProgressBar {{
 QProgressBar::chunk {{
     background-color: {ACCENT};
     border-radius: 5px;
+}}
+
+QGroupBox {{
+    background: transparent;
+    border: 1px solid {BORDER};
+    border-radius: 10px;
+    margin-top: 12px;
+    padding: 12px 8px 8px 8px;
+}}
+QGroupBox::title {{
+    subcontrol-origin: margin;
+    left: 12px;
+    padding: 0 6px;
+    color: {TEXT_MUTED};
 }}
 
 QScrollBar:vertical {{
