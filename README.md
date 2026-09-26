@@ -68,3 +68,7 @@ La recherche propose désormais **GitHub (GGUF)**, avec lecture des releases et 
 ## Mise à jour v33
 
 Les téléchargements GitHub affichent leur progression, peuvent être annulés et reprennent après interruption. Les fichiers partiels sont contrôlés par SHA-256 quand GitHub fournit cette information. Voir [le guide v33](MISE_A_JOUR_v33.md).
+
+## Mise à jour v34
+
+Un historique local des modèles GitHub installés indique le nombre de fichiers et l'espace occupé. Le nettoyage retire les téléchargements temporaires ou devenus inutiles sans supprimer les modèles Ollama. Voir [le guide v34](MISE_A_JOUR_v34.md).

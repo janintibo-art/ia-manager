@@ -2,6 +2,7 @@
 
 import html
 import re
+from pathlib import Path
 from typing import Dict, List, Optional
 from urllib.parse import quote_plus
 
@@ -15,6 +16,7 @@ from PyQt6.QtWidgets import (
 from src.backend import model_registry as reg
 from src.backend import model_search as ms
 from src.backend import providers as pv
+from src.backend import download_history
 from src.backend.ai_manager import AIManager
 from src.backend.system_analyzer import SystemAnalyzer
 from src.ui import style
@@ -174,6 +176,16 @@ class SearchTab(QWidget):
         ol_site.clicked.connect(self.open_ollama_site)
         ol.addWidget(ol_site)
         root.addLayout(ol)
+
+        history_row = QHBoxLayout()
+        self.history_label = QLabel("Historique : aucun modèle téléchargé depuis GitHub")
+        self.history_label.setObjectName("Muted")
+        history_row.addWidget(self.history_label, 1)
+        history_btn = QPushButton("🧹 Nettoyer le cache")
+        history_btn.clicked.connect(self.clean_download_cache)
+        history_row.addWidget(history_btn)
+        root.addLayout(history_row)
+        self.refresh_history()
 
         self.detail.setHtml(self.welcome_html())
         self.update_buttons()
@@ -412,10 +424,24 @@ class SearchTab(QWidget):
             self.update_buttons()
             return
         self.dl_status.setText("⏳ Import du fichier dans Ollama…")
+        download_history.record(name, "GitHub", result, Path(result).stat().st_size if Path(result).exists() else 0)
         self.github_worker = FunctionWorker(pv.create_from_gguf, name, result)
         self.github_worker.done.connect(lambda done, message, n=name: self.on_downloaded(
             done, str(message) if not done else "", n))
         self.github_worker.start()
+
+    def refresh_history(self):
+        entries = download_history.list_entries()
+        if not entries:
+            self.history_label.setText("Historique : aucun modèle téléchargé depuis GitHub")
+            return
+        total = sum(int(item.get("size") or 0) for item in entries)
+        self.history_label.setText(f"Historique : {len(entries)} modèle(s) · {gb(total)} conservés dans le cache")
+
+    def clean_download_cache(self):
+        removed = download_history.cleanup_cache()
+        self.refresh_history()
+        self.dl_status.setText(f"✅ Cache nettoyé : {removed} fichier(s) supprimé(s).")
 
     def cancel_download(self):
         if self.github_file_worker:
@@ -440,6 +466,7 @@ class SearchTab(QWidget):
         if ok:
             self.dl_status.setText(f"✅ {name} est installé : il est disponible dans le Chat.")
             self.models_changed.emit()
+            self.refresh_history()
             if self.details:
                 self.show_details(self.details)
         else:
