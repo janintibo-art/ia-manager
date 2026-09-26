@@ -10,6 +10,7 @@ _SAFE_KEYS = {
     "projects_dir", "github_owner", "termux_script", "github_folder", "theme", "font_size",
     "web_search", "searxng_url", "offline_mode", "providers", "project_memory_enabled",
     "serialize_local_jobs",
+    "model_favorites",
 }
 
 

@@ -104,3 +104,7 @@ Les résultats de recherche peuvent être ajoutés aux favoris, quelle que soit 
 ## Mise à jour v42
 
 Un filtre **Favoris uniquement** permet d'afficher rapidement les modèles enregistrés, en respectant leur source. Voir [le guide v42](MISE_A_JOUR_v42.md).
+
+## Mise à jour v43
+
+Les favoris peuvent être exportés et importés en JSON, sans secrets. Ils sont aussi inclus dans la sauvegarde générale. Voir [le guide v43](MISE_A_JOUR_v43.md).

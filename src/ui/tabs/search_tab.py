@@ -9,7 +9,7 @@ from urllib.parse import quote_plus
 from PyQt6.QtCore import Qt, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
-    QCheckBox, QComboBox, QFrame, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem,
+    QCheckBox, QComboBox, QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem,
     QMessageBox, QProgressBar, QPushButton, QSplitter, QTextBrowser, QVBoxLayout, QWidget,
 )
 
@@ -80,6 +80,12 @@ class SearchTab(QWidget):
         self.favorites_only = QCheckBox("⭐ Favoris uniquement")
         self.favorites_only.toggled.connect(self.on_favorites_filter)
         row.addWidget(self.favorites_only)
+        fav_export = QPushButton("📤 Exporter favoris")
+        fav_export.clicked.connect(self.export_favorites)
+        row.addWidget(fav_export)
+        fav_import = QPushButton("📥 Importer favoris")
+        fav_import.clicked.connect(self.import_favorites)
+        row.addWidget(fav_import)
         self.category = QComboBox()
         self.category.addItems(list(ms.CATEGORIES))
         row.addWidget(self.category, 1)
@@ -306,6 +312,27 @@ class SearchTab(QWidget):
                 item.setData(Qt.ItemDataRole.UserRole, m.get("id", ""))
                 self.result_list.addItem(item)
             self.status.setText(f"{len(self.results)} favori(s) affiché(s).")
+
+    def export_favorites(self):
+        path, _ = QFileDialog.getSaveFileName(self, "Exporter les favoris", "ia_manager_favoris.json", "JSON (*.json)")
+        if path:
+            try:
+                model_favorites.export_file(path)
+                self.status.setText("✅ Favoris exportés sans secrets.")
+            except Exception as error:
+                self.status.setText(f"❌ Export impossible : {error}")
+
+    def import_favorites(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Importer les favoris", "", "JSON (*.json)")
+        if not path:
+            return
+        try:
+            count = model_favorites.import_file(path)
+            self.status.setText(f"✅ {count} favori(s) importé(s).")
+            if self.results:
+                self.on_favorites_filter(self.favorites_only.isChecked())
+        except Exception as error:
+            self.status.setText(f"❌ Import impossible : {error}")
 
     def current_source_key(self):
         return ("github", "modelscope", "civitai", "huggingface")[self.source.currentIndex()]
