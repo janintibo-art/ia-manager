@@ -79,6 +79,21 @@ def detect_gpu() -> Dict:
     return {"name": "Aucun GPU détecté", "vendor": "Aucun", "vram_gb": 0.0, "vram_exact": True}
 
 
+def gpu_usage() -> Dict:
+    """VRAM utilisée en ce moment (NVIDIA via nvidia-smi). Pour le tableau de bord en direct :
+    contrairement à detect_gpu(), ceci n'est pas mis en cache, la valeur change à chaque appel."""
+    out = _run(["nvidia-smi", "--query-gpu=memory.used,memory.total", "--format=csv,noheader,nounits"])
+    if out:
+        parts = [p.strip() for p in out.splitlines()[0].split(",")]
+        if len(parts) >= 2:
+            try:
+                return {"used_gb": float(parts[0]) / 1024, "total_gb": float(parts[1]) / 1024, "exact": True}
+            except ValueError:
+                pass
+    gpu = detect_gpu()
+    return {"used_gb": 0.0, "total_gb": gpu["vram_gb"], "exact": False}
+
+
 class SystemAnalyzer:
     """Analyser les capacités du système"""
 

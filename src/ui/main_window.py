@@ -14,6 +14,7 @@ from src.ui import style
 from src.backend import tasks as tk
 from src.ui.tabs.chat_tab import ChatTab
 from src.ui.tabs.connections_tab import ConnectionsTab
+from src.ui.tabs.dashboard_tab import DashboardTab
 from src.ui.tabs.github_tab import GithubTab
 from src.ui.tabs.models_tab import ModelsTab
 from src.ui.tabs.projects_tab import ProjectsTab, get_project_manager
@@ -47,12 +48,14 @@ class MainWindow(QMainWindow):
         self.tasks_tab = TasksTab()
         self.connections_tab = ConnectionsTab()
         self.github_tab = GithubTab()
+        self.dashboard_tab = DashboardTab()
 
         self.tabs.addTab(self.setup_tab, "⚙️ Analyse")
         self.tabs.addTab(self.models_tab, "📦 Modèles")
         self.tabs.addTab(self.search_tab, "🔍 Recherche")
         self.tabs.addTab(self.projects_tab, "📁 Projets")
         self.tabs.addTab(self.chat_tab, "💬 Chat")
+        self.tabs.addTab(self.dashboard_tab, "📊 Tableau de bord")
         self.tabs.addTab(self.tasks_tab, "⏰ Tâches")
         self.tabs.addTab(self.connections_tab, "🔌 Connexions")
         self.tabs.addTab(self.github_tab, "🐙 GitHub")

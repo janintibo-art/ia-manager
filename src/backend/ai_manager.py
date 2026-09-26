@@ -78,3 +78,25 @@ class AIManager:
             return response.status_code == 200
         except Exception:
             return False
+
+    def list_running(self) -> List[Dict]:
+        """IA actuellement chargées en mémoire (VRAM/RAM) par Ollama"""
+        try:
+            response = requests.get(f"{self.ollama_url}/api/ps", timeout=3)
+            if response.status_code == 200:
+                return response.json().get("models", [])
+        except Exception:
+            pass
+        return []
+
+    def unload_model(self, model_name: str) -> bool:
+        """Décharger une IA de la mémoire tout de suite (keep_alive: 0)"""
+        try:
+            response = requests.post(
+                f"{self.ollama_url}/api/generate",
+                json={"model": model_name, "prompt": "", "keep_alive": 0},
+                timeout=15,
+            )
+            return response.status_code == 200
+        except Exception:
+            return False

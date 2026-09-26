@@ -320,6 +320,32 @@ w.check_tasks()
 tasks.reload()
 print("Onglet Tâches OK :", stored["last_status"][:60])
 
+# ------------------------------------------------------------- Tableau de bord
+from src.backend import dashboard as dash  # noqa: E402
+
+assert dash.format_expiry("") == ""
+assert dash.format_expiry("pas une date") == ""
+future = (__import__("datetime").datetime.now(__import__("datetime").timezone.utc)
+          + __import__("datetime").timedelta(minutes=5)).isoformat()
+assert "min" in dash.format_expiry(future) or "s" in dash.format_expiry(future), dash.format_expiry(future)
+
+board = w.dashboard_tab
+board.fill_running([{"name": "llama3.2:3b", "size": 2_000_000_000, "size_vram": 1_500_000_000,
+                     "expiry_text": "4 min"}])
+assert len(board.rows) == 1 and board.rows[0].name == "llama3.2:3b"
+assert not board.empty_label.isVisible() and board.unload_all_btn.isEnabled()
+board.fill_running([])
+assert not board.rows and board.empty_label.isVisible() and not board.unload_all_btn.isEnabled()
+
+board.refresh()
+loop = QEventLoop()
+board.worker.done.connect(loop.quit)
+QTimer.singleShot(15000, loop.quit)
+loop.exec()
+app.processEvents()
+assert board.ram_meter.value_label.text() != "—", "RAM lue"
+print("Onglet Tableau de bord OK :", board.hint.text() or "Ollama détecté")
+
 # ------------------------------------------------------------- Recherche d'IA
 search = w.search_tab
 search.request_id += 1
