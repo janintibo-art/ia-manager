@@ -100,3 +100,7 @@ Le cache des modèles GGUF et des fichiers image Civitai est maintenant suivi et
 ## Mise à jour v41
 
 Les résultats de recherche peuvent être ajoutés aux favoris, quelle que soit leur source (Hugging Face, GitHub, ModelScope ou Civitai). Voir [le guide v41](MISE_A_JOUR_v41.md).
+
+## Mise à jour v42
+
+Un filtre **Favoris uniquement** permet d'afficher rapidement les modèles enregistrés, en respectant leur source. Voir [le guide v42](MISE_A_JOUR_v42.md).

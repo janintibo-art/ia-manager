@@ -77,6 +77,9 @@ class SearchTab(QWidget):
         self.source.addItems(["🤗 Hugging Face", "🐙 GitHub (GGUF)", "🌏 ModelScope", "🎨 Civitai (image)"])
         self.source.currentIndexChanged.connect(self.source_changed)
         row.addWidget(self.source, 1)
+        self.favorites_only = QCheckBox("⭐ Favoris uniquement")
+        self.favorites_only.toggled.connect(self.on_favorites_filter)
+        row.addWidget(self.favorites_only)
         self.category = QComboBox()
         self.category.addItems(list(ms.CATEGORIES))
         row.addWidget(self.category, 1)
@@ -250,6 +253,9 @@ class SearchTab(QWidget):
             self.status.setText(f"❌ Recherche impossible (connexion Internet ?) : {result}")
             return
         self.results = list(result)
+        if self.favorites_only.isChecked():
+            source = self.current_source_key()
+            self.results = [m for m in self.results if model_favorites.is_favorite(source, m.get("id", ""))]
         self.result_list.clear()
         github = self.source.currentIndex() == 1
         modelscope = self.source.currentIndex() == 2
@@ -287,6 +293,19 @@ class SearchTab(QWidget):
         self.quant_list.clear()
         self.detail.setHtml(f"<h2>{html.escape(repo)}</h2><p>⏳ Chargement de la fiche…</p>")
         self.update_buttons()
+
+    def on_favorites_filter(self, enabled: bool):
+        if enabled and not self.results:
+            self.search()
+        elif self.results:
+            source = self.current_source_key()
+            self.results = [m for m in self.results if not enabled or model_favorites.is_favorite(source, m.get("id", ""))]
+            self.result_list.clear()
+            for m in self.results:
+                item = QListWidgetItem(f"★ {m.get('name', m.get('id', ''))}\n      {m.get('author', '')}")
+                item.setData(Qt.ItemDataRole.UserRole, m.get("id", ""))
+                self.result_list.addItem(item)
+            self.status.setText(f"{len(self.results)} favori(s) affiché(s).")
 
     def current_source_key(self):
         return ("github", "modelscope", "civitai", "huggingface")[self.source.currentIndex()]
