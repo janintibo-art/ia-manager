@@ -3,6 +3,7 @@
 
 import hashlib
 import re
+import time
 from datetime import datetime
 from typing import Dict, List, Optional
 
@@ -17,6 +18,26 @@ MODELSCOPE_API = "https://modelscope.cn/openapi/v1/models"
 MODELSCOPE_SITE = "https://modelscope.cn/models"
 CIVITAI_API = "https://civitai.com/api/v1/models"
 CIVITAI_SITE = "https://civitai.com/models"
+_DETAIL_CACHE = {}
+_DETAIL_TTL = 60
+
+
+def clear_detail_cache():
+    _DETAIL_CACHE.clear()
+
+
+def cached_details(source: str, repo: str, timeout: int = 20) -> Dict:
+    """Fiche mise en cache 60 secondes pour éviter les requêtes répétées."""
+    key = (source, repo)
+    now = time.monotonic()
+    previous = _DETAIL_CACHE.get(key)
+    if previous and now - previous[0] < _DETAIL_TTL:
+        return dict(previous[1])
+    loaders = {"github": github_details, "modelscope": modelscope_details,
+               "civitai": civitai_details, "huggingface": model_details}
+    value = loaders[source](repo, timeout)
+    _DETAIL_CACHE[key] = (now, value)
+    return value
 
 
 def github_headers() -> Dict[str, str]:

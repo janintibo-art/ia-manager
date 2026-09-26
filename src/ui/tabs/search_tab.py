@@ -345,8 +345,7 @@ class SearchTab(QWidget):
         state = model_favorites.toggle(self.current_source_key(), model_id, model_id.split("/")[-1])
         self.favorite_btn.setText("★ Retirer des favoris" if state else "☆ Ajouter aux favoris")
         self.search() if self.results else None
-        detail_fn = ms.github_details if self.source.currentIndex() == 1 else (ms.modelscope_details if self.source.currentIndex() == 2 else (ms.civitai_details if self.source.currentIndex() == 3 else ms.model_details))
-        self.detail_worker = FunctionWorker(detail_fn, repo)
+        self.detail_worker = FunctionWorker(ms.cached_details, self.current_source_key(), repo)
         self.detail_worker.done.connect(lambda ok, res, r=rid, rp=repo: self.on_details(r, rp, ok, res))
         self.detail_worker.start()
 

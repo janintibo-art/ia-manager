@@ -108,3 +108,7 @@ Un filtre **Favoris uniquement** permet d'afficher rapidement les modèles enreg
 ## Mise à jour v43
 
 Les favoris peuvent être exportés et importés en JSON, sans secrets. Ils sont aussi inclus dans la sauvegarde générale. Voir [le guide v43](MISE_A_JOUR_v43.md).
+
+## Mise à jour v44
+
+Les fiches détaillées des modèles sont conservées 60 secondes pour accélérer la navigation et limiter les requêtes réseau. Le vidage des caches IA force une actualisation complète. Voir [le guide v44](MISE_A_JOUR_v44.md).

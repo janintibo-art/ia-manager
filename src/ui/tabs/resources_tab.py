@@ -3,6 +3,7 @@ from PyQt6.QtWidgets import QWidget,QVBoxLayout,QLabel,QCheckBox,QPushButton,QLi
 from PyQt6.QtCore import Qt,QTimer
 from src.backend import settings,local_jobs,dashboard,model_options
 from src.backend.ai_manager import AIManager
+from src.backend import model_search
 from src.ui.workers import FunctionWorker
 
 
@@ -42,6 +43,7 @@ class ResourcesTab(QWidget):
     def clear_caches(self):
         self.ai.invalidate_model_cache()
         model_options._meta_cache.clear()
+        model_search.clear_detail_cache()
         self.memory.setText("Caches IA vidés. Les prochains rafraîchissements reliront Ollama.")
         self.update_queue()
 
