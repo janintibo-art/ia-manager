@@ -12,8 +12,9 @@ from pathlib import Path
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
+from src.backend import settings
+from src.ui import style
 from src.ui.main_window import MainWindow
-from src.ui.style import BASE_FONT_PT, STYLESHEET
 
 LOG_FILE = Path.home() / ".ia_manager" / "erreurs.log"
 
@@ -49,8 +50,9 @@ def main():
     app.setApplicationName("IA Manager")
     # La fenêtre peut être réduite près de l'horloge (tâches planifiées) : on quitte explicitement
     app.setQuitOnLastWindowClosed(False)
-    app.setFont(QFont("Segoe UI", BASE_FONT_PT))
-    app.setStyleSheet(STYLESHEET)
+    style.apply_theme(settings.get("theme") or "sombre", settings.get("font_size") or 13)
+    app.setFont(QFont("Segoe UI", style.BASE_FONT_PT))
+    app.setStyleSheet(style.build_stylesheet())
 
     window = MainWindow()
     window.show()

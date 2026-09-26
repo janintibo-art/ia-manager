@@ -12,6 +12,8 @@ DEFAULTS: Dict[str, Any] = {
     "github_owner": "",
     "termux_script": "~/memo-depot/mise-a-jour.sh",
     "github_folder": "",
+    "theme": "sombre",
+    "font_size": 13,
 }
 
 

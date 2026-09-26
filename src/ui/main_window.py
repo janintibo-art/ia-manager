@@ -3,12 +3,14 @@
 from typing import Dict, List, Optional, Set
 
 from PyQt6.QtCore import QTimer
-from PyQt6.QtGui import QAction
+from PyQt6.QtGui import QAction, QFont
 from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QMenu, QStyle, QSystemTrayIcon, QTabWidget, QVBoxLayout, QWidget,
+    QApplication, QHBoxLayout, QMainWindow, QMenu, QPushButton, QStyle, QSystemTrayIcon, QTabWidget,
+    QVBoxLayout, QWidget,
 )
 
 from src.backend import code_tools, settings
+from src.ui import style
 from src.backend import tasks as tk
 from src.ui.tabs.chat_tab import ChatTab
 from src.ui.tabs.connections_tab import ConnectionsTab
@@ -62,6 +64,7 @@ class MainWindow(QMainWindow):
         self.connections_tab.providers_changed.connect(self.on_models_changed)
         self.setup_tab.analysis_done.connect(self.models_tab.set_system_info)
         self.setup_tab.analysis_done.connect(self.search_tab.set_system_info)
+        self.setup_tab.analysis_done.connect(self.chat_tab.set_system_info)
         self.search_tab.models_changed.connect(self.on_models_changed)
         self.setup_tab.show_model.connect(self.open_model)
 
@@ -84,6 +87,7 @@ class MainWindow(QMainWindow):
 
         self.tray: Optional[QSystemTrayIcon] = None
         self.setup_tray()
+        self.tabs.setCornerWidget(self.build_appearance_buttons())
 
         central = QWidget()
         layout = QVBoxLayout(central)
@@ -116,6 +120,36 @@ class MainWindow(QMainWindow):
     def new_conversation(self, pid: str):
         self.chat_tab.new_conversation_in(pid)
         self.tabs.setCurrentWidget(self.chat_tab)
+
+    # ------------------------------------------------------------ apparence
+    def build_appearance_buttons(self) -> QWidget:
+        box = QWidget()
+        lay = QHBoxLayout(box)
+        lay.setContentsMargins(0, 0, 6, 0)
+        lay.setSpacing(4)
+        for text, tip, slot in (("A−", "Texte plus petit", lambda: self.change_appearance(delta=-1)),
+                                ("A+", "Texte plus grand", lambda: self.change_appearance(delta=1)),
+                                ("🌓", "Thème clair / sombre", lambda: self.change_appearance(toggle=True))):
+            b = QPushButton(text)
+            b.setToolTip(tip)
+            b.setStyleSheet("padding: 4px 10px;")
+            b.clicked.connect(slot)
+            lay.addWidget(b)
+        return box
+
+    def change_appearance(self, delta: int = 0, toggle: bool = False):
+        theme = style.CURRENT_THEME
+        if toggle:
+            theme = "clair" if theme == "sombre" else "sombre"
+        size = max(10, min(20, style.BASE_FONT_PT + delta))
+        style.apply_theme(theme, size)
+        settings.set("theme", theme)
+        settings.set("font_size", size)
+        app = QApplication.instance()
+        app.setFont(QFont("Segoe UI", style.BASE_FONT_PT))
+        app.setStyleSheet(style.build_stylesheet())
+        if toggle:
+            self.chat_tab.status.setText("🌓 Thème changé : les nouveaux messages utilisent les nouvelles couleurs.")
 
     # ------------------------------------------------------------ zone de notification
     def setup_tray(self):

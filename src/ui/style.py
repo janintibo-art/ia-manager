@@ -1,20 +1,46 @@
-"""Thème visuel de l'application (sombre, gros caractères)"""
+"""Thème visuel de l'application : sombre ou clair, taille de police réglable.
+
+Les couleurs sont des variables du module : apply_theme() les change, et tout ce qui
+est affiché ensuite (feuille de style, bulles du Chat…) utilise les nouvelles valeurs.
+"""
 
 BASE_FONT_PT = 13
 
-ACCENT = "#7c6cff"
-ACCENT_HOVER = "#9486ff"
-BG = "#16171d"
-SURFACE = "#1f2029"
-SURFACE_2 = "#292a36"
-BORDER = "#363848"
-TEXT = "#ececf1"
-TEXT_MUTED = "#a3a5b8"
-GREEN = "#3ecf8e"
-ORANGE = "#f5a524"
-RED = "#f25f5c"
+THEMES = {
+    "sombre": {
+        "ACCENT": "#7c6cff", "ACCENT_HOVER": "#9486ff", "BG": "#16171d", "SURFACE": "#1f2029",
+        "SURFACE_2": "#292a36", "BORDER": "#363848", "TEXT": "#ececf1", "TEXT_MUTED": "#a3a5b8",
+        "GREEN": "#3ecf8e", "ORANGE": "#f5a524", "RED": "#f25f5c", "CODE_BG": "#0d0e12",
+        "CODE_FG": "#e6e6f0", "INLINE_CODE_BG": "#2b2d3a",
+    },
+    "clair": {
+        "ACCENT": "#6a5cf0", "ACCENT_HOVER": "#5646e0", "BG": "#f4f5f9", "SURFACE": "#ffffff",
+        "SURFACE_2": "#eceef5", "BORDER": "#d4d7e3", "TEXT": "#1d1f2b", "TEXT_MUTED": "#5d6275",
+        "GREEN": "#16875a", "ORANGE": "#b36b00", "RED": "#cc3b3b", "CODE_BG": "#f0f1f6",
+        "CODE_FG": "#1d1f2b", "INLINE_CODE_BG": "#e4e6f0",
+    },
+}
 
-STYLESHEET = f"""
+CURRENT_THEME = "sombre"
+ACCENT = ACCENT_HOVER = BG = SURFACE = SURFACE_2 = BORDER = TEXT = TEXT_MUTED = ""
+GREEN = ORANGE = RED = CODE_BG = CODE_FG = INLINE_CODE_BG = ""
+
+
+def apply_theme(name: str = "sombre", font_pt: int = 13) -> None:
+    """Change les couleurs et la taille de police (à suivre de app.setStyleSheet(build_stylesheet()))"""
+    global CURRENT_THEME, BASE_FONT_PT
+    CURRENT_THEME = name if name in THEMES else "sombre"
+    BASE_FONT_PT = max(10, min(20, int(font_pt)))
+    globals().update(THEMES[CURRENT_THEME])
+
+
+def code_colors() -> dict:
+    """Couleurs utilisées pour afficher le code dans le Chat"""
+    return {"code_bg": INLINE_CODE_BG, "code_fg": CODE_FG, "block_bg": CODE_BG, "muted": TEXT_MUTED}
+
+
+def build_stylesheet() -> str:
+    return f"""
 QWidget {{
     background-color: {BG};
     color: {TEXT};
@@ -145,12 +171,12 @@ QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {{
     border: 1px solid {ACCENT};
 }}
 QPlainTextEdit#Console {{
-    background-color: #0d0e12;
+    background-color: {CODE_BG};
     font-family: "Consolas", "Courier New", monospace;
     font-size: {BASE_FONT_PT - 1}pt;
 }}
 QLabel#Command {{
-    background-color: #0d0e12;
+    background-color: {CODE_BG};
     border: 1px solid {BORDER};
     border-radius: 8px;
     padding: 10px 12px;
@@ -243,3 +269,7 @@ QToolTip {{
     padding: 6px;
 }}
 """
+
+
+apply_theme("sombre", 13)
+STYLESHEET = build_stylesheet()

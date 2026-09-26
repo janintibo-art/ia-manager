@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import (
 from src.backend import settings
 from src.backend.ai_manager import AIManager
 from src.backend.project_manager import (
-    INSTRUCTION_TEMPLATES, ProjectManager, filter_projects, sort_projects,
+    INSTRUCTION_TEMPLATES, ProjectManager, filter_projects, search_conversations, sort_projects,
 )
 
 SORT_MODES = ["Modifié récemment", "Nom", "Catégorie", "Nombre de discussions"]
@@ -78,6 +78,23 @@ class ProjectsTab(QWidget):
         open_loc.clicked.connect(lambda: open_folder(self.pm.root))
         loc.addWidget(open_loc)
         root.addLayout(loc)
+
+        gs_row = QHBoxLayout()
+        self.global_search = QLineEdit()
+        self.global_search.setPlaceholderText("🔎 Rechercher un mot dans TOUTES les discussions de tous les projets…")
+        self.global_search.setClearButtonEnabled(True)
+        self.global_search.returnPressed.connect(self.run_global_search)
+        self.global_search.textChanged.connect(lambda t: self.run_global_search() if not t.strip() else None)
+        gs_row.addWidget(self.global_search, 1)
+        gs_btn = QPushButton("Rechercher")
+        gs_btn.clicked.connect(self.run_global_search)
+        gs_row.addWidget(gs_btn)
+        root.addLayout(gs_row)
+        self.global_results = QListWidget()
+        self.global_results.setMaximumHeight(230)
+        self.global_results.setVisible(False)
+        self.global_results.itemDoubleClicked.connect(self.open_global_result)
+        root.addWidget(self.global_results)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
 
@@ -557,3 +574,28 @@ class ProjectsTab(QWidget):
         if folder:
             out = self.pm.export_project(self.current_pid, folder)
             self.saves_status.setText(f"✅ Sauvegarde créée : {html.escape(str(out))}")
+
+    # ------------------------------------------------------------ recherche globale
+    def run_global_search(self):
+        query = self.global_search.text().strip()
+        self.global_results.clear()
+        if len(query) < 2:
+            self.global_results.setVisible(False)
+            return
+        results = search_conversations(str(self.pm.root), query)
+        if not results:
+            self.global_results.addItem(f"Aucune discussion ne contient « {query} ».")
+        for r in results:
+            date = r["updated"].replace("T", " ")[:16]
+            item = QListWidgetItem(f"💬 {r['title']}   ·   📁 {r['project_name']}   ·   {date}   ·   "
+                                   f"{r['hits']} occurrence(s)\n      {r['snippet'][:160]}")
+            item.setData(Qt.ItemDataRole.UserRole, (r["project"], r["id"]))
+            item.setToolTip("Double-clic pour rouvrir cette discussion dans le Chat")
+            self.global_results.addItem(item)
+        self.global_results.setVisible(True)
+
+    def open_global_result(self, item):
+        data = item.data(Qt.ItemDataRole.UserRole)
+        if data:
+            pid, cid = data
+            self.open_conversation.emit(pid, cid)

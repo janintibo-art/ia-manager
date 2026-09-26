@@ -10,6 +10,8 @@ from PyQt6.QtWidgets import (
 )
 
 from src.backend import model_registry as reg
+from src.backend import settings
+from src.backend.model_options import PRIORITY_TO_MODE
 from src.backend.ai_manager import AIManager
 from src.backend.allocation import AllocationCalculator
 from src.backend.system_analyzer import SystemAnalyzer
@@ -128,8 +130,11 @@ class SetupTab(QWidget):
             rb = QRadioButton(label)
             self.prio_group.addButton(rb, i)
             radios.addWidget(rb)
-            if i == 1:
+            saved_mode = settings.get("default_mode") or "balanced"
+            if PRIORITY_TO_MODE.get(PRIORITIES[i][0]) == saved_mode:
                 rb.setChecked(True)
+        if self.prio_group.checkedId() < 0:
+            self.prio_group.button(1).setChecked(True)
         radios.addStretch()
         self.prio_group.idClicked.connect(lambda _id: self.update_all())
         prio_lay.addLayout(radios)
@@ -193,10 +198,10 @@ class SetupTab(QWidget):
         slider_row.addWidget(QLabel("Part de la VRAM utilisée :"))
         self.vram_slider = QSlider(Qt.Orientation.Horizontal)
         self.vram_slider.setRange(0, 100)
-        self.vram_slider.setValue(90)
+        self.vram_slider.setValue(int(settings.get("vram_percent") or 90))
         self.vram_slider.valueChanged.connect(self.update_allocation)
         slider_row.addWidget(self.vram_slider, 1)
-        self.vram_label = QLabel("90 %")
+        self.vram_label = QLabel(f"{self.vram_slider.value()} %")
         self.vram_label.setMinimumWidth(60)
         slider_row.addWidget(self.vram_label)
         alloc_lay.addLayout(slider_row)
@@ -249,6 +254,7 @@ class SetupTab(QWidget):
     def update_all(self):
         idx = max(0, self.prio_group.checkedId())
         self.prio_desc.setText(PRIORITIES[idx][2])
+        settings.set("default_mode", PRIORITY_TO_MODE.get(PRIORITIES[idx][0], "balanced"))
         self.update_recommendations()
         self.update_allocation()
 
@@ -306,6 +312,8 @@ class SetupTab(QWidget):
     def update_allocation(self):
         vram_percent = self.vram_slider.value()
         self.vram_label.setText(f"{vram_percent} %")
+        if int(settings.get("vram_percent") or 90) != vram_percent:
+            settings.set("vram_percent", vram_percent)
         priority = self.priority_key()
         a = self.allocator.calculate_allocation(vram_percent=vram_percent, priority=priority)
         self.alloc_text.setText(
@@ -313,6 +321,9 @@ class SetupTab(QWidget):
             f" &nbsp;&nbsp; 💾 <b>RAM :</b> {a['ram_mb'] / 1024:.1f} Go"
             f" &nbsp;&nbsp; 📦 <b>Taille de modèle max :</b> {a['max_model_gb']:.1f} Go</p>"
             f"<p style='color:{style.TEXT_MUTED}'>💡 {a['advice']}</p>"
+            f"<p style='color:{style.GREEN}'>✅ Ce réglage est réellement appliqué à toutes les IA locales "
+            f"(couches en VRAM et mémoire de conversation envoyées à Ollama). Pour régler un modèle "
+            f"en particulier : bouton ⚙️ à côté du choix de l'IA dans le Chat.</p>"
         )
 
     # ---------------------------------------------------- téléchargement

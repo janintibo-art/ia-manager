@@ -7,25 +7,26 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from PyQt6.QtCore import QBuffer, QByteArray, QIODevice, Qt, QUrl, pyqtSignal
+from PyQt6.QtCore import QBuffer, QByteArray, QIODevice, Qt, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices, QImage, QKeyEvent, QTextCursor, QTextDocument
 from PyQt6.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QFileDialog, QHBoxLayout, QLabel, QMessageBox,
+    QApplication, QCheckBox, QComboBox, QFileDialog, QHBoxLayout, QLabel, QMenu, QMessageBox,
     QPushButton, QTextBrowser, QTextEdit, QVBoxLayout, QWidget,
 )
 
 from src.backend import attachments as att
 from src.backend import code_tools, providers, settings
+from src.backend import quick_commands as qc
 from src.backend import model_registry as reg
 from src.backend.ai_manager import AIManager
 from src.backend.project_manager import now_iso, slugify
 from src.ui import style
 from src.ui.tabs.projects_tab import get_project_manager
-from src.ui.workers import ChatWorker
+from src.ui.dialogs import ModelSettingsDialog, QuickCommandsDialog
+from src.ui.workers import StreamWorker
 
 NO_PROJECT = "(aucun projet — discussion libre)"
 MAX_IMAGE_SIDE = 1600
-COLORS = {"code_bg": "#2b2d3a", "code_fg": "#e6e6f0", "block_bg": "#0d0e12", "muted": style.TEXT_MUTED}
 
 
 def qimage_to_png(img: QImage) -> bytes:
@@ -83,7 +84,15 @@ class ChatTab(QWidget):
         super().__init__()
         self.ai_manager = AIManager()
         self.pm = get_project_manager()
-        self.worker: Optional[ChatWorker] = None
+        self.worker: Optional[StreamWorker] = None
+        self.stream_pos = 0
+        self.abandoned: List[StreamWorker] = []
+        self.stream_buffer: List[str] = []
+        self.stream_ref = ""
+        self.system_info: Optional[Dict] = None
+        self.flush_timer = QTimer(self)
+        self.flush_timer.setInterval(60)
+        self.flush_timer.timeout.connect(self.flush_stream)
         self.project_id: Optional[str] = None
         self.messages: List[Dict] = []
         self.pending: List[Dict] = []          # fichiers joints pas encore envoyés
@@ -112,6 +121,12 @@ class ChatTab(QWidget):
         self.code_mode.setChecked(bool(settings.get("code_mode")))
         self.code_mode.toggled.connect(lambda on: (settings.set("code_mode", on), self.show_hint()))
         head.addWidget(self.code_mode)
+        self.commands_btn = QPushButton("⚡ Commandes")
+        self.commands_btn.setToolTip("Commandes rapides : tapez par exemple /resume suivi de votre texte")
+        self.commands_menu = QMenu(self)
+        self.commands_menu.aboutToShow.connect(self.fill_commands_menu)
+        self.commands_btn.setMenu(self.commands_menu)
+        head.addWidget(self.commands_btn)
         clear_btn = QPushButton("🧹 Nouvelle discussion")
         clear_btn.clicked.connect(self.clear_chat)
         head.addWidget(clear_btn)
@@ -133,6 +148,10 @@ class ChatTab(QWidget):
         refresh_btn.setToolTip("Actualiser les IA et les projets")
         refresh_btn.clicked.connect(self.refresh_all)
         selectors.addWidget(refresh_btn)
+        settings_btn = QPushButton("⚙️")
+        settings_btn.setToolTip("Réglages de cette IA : répartition VRAM/RAM, mémoire, créativité")
+        settings_btn.clicked.connect(self.open_model_settings)
+        selectors.addWidget(settings_btn)
         root.addLayout(selectors)
 
         self.hint = QLabel()
@@ -177,6 +196,12 @@ class ChatTab(QWidget):
         self.send_btn.setMinimumHeight(100)
         self.send_btn.clicked.connect(self.send_message)
         input_row.addWidget(self.send_btn)
+        self.stop_btn = QPushButton("⏹ Stop")
+        self.stop_btn.setObjectName("Danger")
+        self.stop_btn.setMinimumHeight(100)
+        self.stop_btn.setVisible(False)
+        self.stop_btn.clicked.connect(self.stop_generation)
+        input_row.addWidget(self.stop_btn)
         root.addLayout(input_row)
 
     # ------------------------------------------------------ glisser-déposer
@@ -391,7 +416,7 @@ class ChatTab(QWidget):
                 body += "<br>" + imgs
             self.append_html(self.bubble_html("Vous", body, style.SURFACE_2, style.ACCENT_HOVER))
         else:
-            body = code_tools.markdown_to_html(m["content"], index, COLORS)
+            body = code_tools.markdown_to_html(m["content"], index, style.code_colors())
             who = f"IA · {providers.label_for(model_ref)[2:].strip()}" if model_ref else "IA"
             self.append_html(self.bubble_html(who, body, style.SURFACE, style.GREEN))
 
@@ -447,6 +472,21 @@ class ChatTab(QWidget):
 
     # ------------------------------------------------------------ discussions
     def reset_conversation(self):
+        if self.worker is not None and self.worker.isRunning():
+            # Une réponse arrivait encore : on l'abandonne pour ne pas polluer la nouvelle discussion
+            try:
+                self.worker.done.disconnect()
+                self.worker.token.disconnect()
+            except TypeError:
+                pass
+            self.worker.stop()
+            # garder une référence tant qu'il tourne (détruire un QThread actif ferme l'application)
+            self.abandoned = [w for w in self.abandoned if w.isRunning()] + [self.worker]
+            self.worker = None
+            self.flush_timer.stop()
+            self.stream_buffer.clear()
+            self.send_btn.setVisible(True)
+            self.stop_btn.setVisible(False)
         self.messages = []
         self.conv_id = None
         self.conv_created = None
@@ -505,6 +545,40 @@ class ChatTab(QWidget):
         self.conv_created = self.conv_created or now_iso()
         self.conversation_saved.emit(self.project_id)
 
+    # ------------------------------------------------------------ commandes rapides
+    def fill_commands_menu(self):
+        self.commands_menu.clear()
+        for c in qc.load():
+            action = self.commands_menu.addAction(f"{c['trigger']}   {c['name']}")
+            action.triggered.connect(lambda _c=False, t=c["trigger"]: self.insert_command(t))
+        self.commands_menu.addSeparator()
+        manage = self.commands_menu.addAction("✏️ Gérer les commandes…")
+        manage.triggered.connect(self.manage_commands)
+
+    def insert_command(self, trigger: str):
+        current = self.message_input.toPlainText()
+        if current.startswith("/"):
+            current = current.partition(" ")[2]
+        self.message_input.setPlainText(f"{trigger} {current}")
+        self.message_input.moveCursor(QTextCursor.MoveOperation.End)
+        self.message_input.setFocus()
+
+    def manage_commands(self):
+        QuickCommandsDialog(self).exec()
+
+    # ------------------------------------------------------------ réglages
+    def set_system_info(self, info: Dict):
+        self.system_info = info
+
+    def open_model_settings(self):
+        ref = self.current_ref()
+        if not ref:
+            QMessageBox.information(self, "Aucune IA", "Choisissez d'abord une IA.")
+            return
+        if ModelSettingsDialog(ref, self.system_info, self).exec():
+            self.status.setText("✅ Réglages enregistrés : ils s'appliquent dès le prochain message.")
+
+    # ------------------------------------------------------------ envoi / réception
     def send_message(self):
         ref = self.current_ref()
         text = self.message_input.toPlainText().strip()
@@ -520,32 +594,101 @@ class ChatTab(QWidget):
         if not text:
             text = "Voici les fichiers joints."
 
-        self.messages.append(att.build_message(text, self.pending))
+        expanded, command = qc.expand(text)
+        message = att.build_message(expanded, self.pending)
+        if command:
+            message["display"] = text
+        self.messages.append(message)
         self.render_message(len(self.messages) - 1, ref)
         self.pending = []
         self.refresh_attach_bar()
         self.message_input.clear()
-        self.send_btn.setEnabled(False)
-        self.send_btn.setText("⏳ …")
-        self.status.setText("L'IA réfléchit…")
+        self.start_stream(ref)
 
-        self.worker = ChatWorker(ref, self.messages, self.instructions())
-        self.worker.answered.connect(lambda answer: self.on_answer(ref, answer))
+    def start_stream(self, ref: str):
+        self.stream_ref = ref
+        self.stream_buffer = []
+        self.send_btn.setVisible(False)
+        self.stop_btn.setVisible(True)
+        self.status.setText("⏳ L'IA réfléchit…")
+        who = providers.label_for(ref)[2:].strip()
+        doc = self.chat_display.document()
+        self.stream_pos = doc.characterCount() - 1
+        self.append_html(f"<p style='margin-top:10px'><span style='color:{style.GREEN}; font-weight:600'>"
+                         f"IA · {html.escape(who)}</span></p><p></p>")
+        self.worker = StreamWorker(ref, self.messages, self.instructions())
+        self.worker.token.connect(self.stream_buffer.append)
+        self.worker.done.connect(self.on_stream_done)
         self.worker.start()
+        self.flush_timer.start()
 
-    def on_answer(self, ref: str, text: str):
+    def flush_stream(self):
+        if not self.stream_buffer:
+            return
+        chunk = "".join(self.stream_buffer)
+        self.stream_buffer.clear()
+        bar = self.chat_display.verticalScrollBar()
+        at_bottom = bar.value() >= bar.maximum() - 30
+        cursor = QTextCursor(self.chat_display.document())
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        cursor.insertText(chunk)
+        if at_bottom:
+            bar.setValue(bar.maximum())
+        if self.status.text().startswith("⏳"):
+            self.status.setText("✍️ L'IA écrit… (⏹ Stop pour l'interrompre)")
+
+    def stop_generation(self):
+        if self.worker is not None and self.worker.isRunning():
+            self.worker.stop()
+            self.status.setText("⏹ Arrêt demandé…")
+
+    def remove_stream_area(self):
+        cursor = QTextCursor(self.chat_display.document())
+        cursor.setPosition(min(self.stream_pos, self.chat_display.document().characterCount() - 1))
+        cursor.movePosition(QTextCursor.MoveOperation.End, QTextCursor.MoveMode.KeepAnchor)
+        cursor.removeSelectedText()
+
+    def on_stream_done(self, text: str, stats: Dict):
+        self.flush_timer.stop()
+        self.stream_buffer.clear()
+        self.remove_stream_area()
+        self.send_btn.setVisible(True)
+        self.stop_btn.setVisible(False)
+        self.on_answer(self.stream_ref, text, stats)
+
+    def on_answer(self, ref: str, text: str, stats: Optional[Dict] = None):
+        stats = stats or {}
         self.send_btn.setEnabled(True)
         self.send_btn.setText("Envoyer ➤")
         self.status.setText("")
-        if text.startswith(("Erreur", "Ollama n'est pas lancé")):
+        if text.startswith(("Erreur", "Ollama n'est pas lancé")) or (not text and not stats.get("stopped")):
             # Pas une vraie réponse : on l'affiche sans la garder dans l'historique
             if self.messages and self.messages[-1]["role"] == "user":
                 self.messages.pop()
-            self.system_message(f"❌ {html.escape(text)}")
+            self.system_message(f"❌ {html.escape(text or 'Réponse vide.')}")
             return
+        if stats.get("stopped"):
+            text = (text + "\n\n*(réponse interrompue)*") if text else "*(réponse interrompue)*"
         self.messages.append({"role": "assistant", "content": text})
         self.render_message(len(self.messages) - 1, ref)
+        self.status.setText(self.stats_text(stats))
         try:
             self.save_current(ref)
         except Exception as e:
             self.system_message(f"⚠️ Sauvegarde impossible : {html.escape(str(e))}")
+
+    @staticmethod
+    def stats_text(stats: Dict) -> str:
+        parts = []
+        if stats.get("tokens_per_s"):
+            parts.append(f"⚡ {stats['tokens_per_s']:.1f} tokens/s")
+        if stats.get("tokens"):
+            parts.append(f"{stats['tokens']} tokens")
+        if stats.get("seconds"):
+            parts.append(f"{stats['seconds']:.0f} s")
+        opts = stats.get("options") or {}
+        if "num_gpu" in opts:
+            parts.append(f"{opts['num_gpu']} couches en VRAM")
+        if opts.get("num_ctx"):
+            parts.append(f"contexte {opts['num_ctx']}")
+        return " · ".join(parts)

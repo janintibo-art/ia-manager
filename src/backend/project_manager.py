@@ -279,3 +279,48 @@ def filter_projects(projects: List[Dict], text: str = "", category: str = "", ta
             continue
         out.append(p)
     return out
+
+
+def _fold(text: str) -> str:
+    """Minuscules sans accents, pour chercher « resume » et trouver « Résumé »"""
+    return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii").lower()
+
+
+def search_conversations(root: str, query: str, limit: int = 100) -> List[Dict]:
+    """Cherche un mot dans toutes les discussions de tous les projets"""
+    q = _fold(query.strip())
+    if len(q) < 2:
+        return []
+    pm = ProjectManager(root)
+    results = []
+    for p in pm.list_projects():
+        saves = pm.project_folder(p["id"]) / SAVES_DIR
+        if not saves.exists():
+            continue
+        for f in saves.glob("*.json"):
+            try:
+                data = json.loads(f.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            title = data.get("title", f.stem)
+            hits = 0
+            snippet = ""
+            if q in _fold(title):
+                hits += 1
+                snippet = title
+            for m in data.get("messages", []):
+                content = m.get("display") or m.get("content", "")
+                folded = _fold(content)
+                pos = folded.find(q)
+                if pos >= 0:
+                    hits += folded.count(q)
+                    if not snippet or snippet == title:
+                        # l'index est approximatif si le texte contient des accents : suffisant pour un extrait
+                        start = max(0, pos - 60)
+                        snippet = ("…" if start else "") + " ".join(content[start:pos + 90].split()) + "…"
+            if hits:
+                results.append({"project": p["id"], "project_name": p["name"], "id": f.stem,
+                                "title": title, "snippet": snippet, "hits": hits,
+                                "updated": data.get("updated", "")})
+    results.sort(key=lambda r: (r["hits"], r["updated"]), reverse=True)
+    return results[:limit]

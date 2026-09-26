@@ -237,16 +237,31 @@ def chat_remote(p: Dict, model: str, messages: List[Dict], system: str = "") -> 
         return f"Erreur : {e}"
 
 
-def chat_ollama(model: str, messages: List[Dict], system: str = "") -> str:
+def _ollama_payload(messages: List[Dict], system: str) -> List[Dict]:
     payload = [{"role": "system", "content": system}] if system.strip() else []
     for m in messages:
         item = {"role": m["role"], "content": m["content"]}
         if m.get("images"):
             item["images"] = [img["data"] for img in m["images"]]
         payload.append(item)
+    return payload
+
+
+def _options_for(model: str, ref: str) -> Dict:
     try:
-        r = requests.post(f"{OLLAMA_URL}/api/chat",
-                          json={"model": model, "messages": payload, "stream": False}, timeout=900)
+        from src.backend import model_options
+        return model_options.ollama_options(model, ref)
+    except Exception:
+        return {}
+
+
+def chat_ollama(model: str, messages: List[Dict], system: str = "",
+                options: Optional[Dict] = None) -> str:
+    body = {"model": model, "messages": _ollama_payload(messages, system), "stream": False}
+    if options:
+        body["options"] = options
+    try:
+        r = requests.post(f"{OLLAMA_URL}/api/chat", json=body, timeout=900)
         if r.status_code == 200:
             return r.json().get("message", {}).get("content", "")
         return f"Erreur Ollama : {r.status_code} {r.text[:200]}"
@@ -257,16 +272,135 @@ def chat_ollama(model: str, messages: List[Dict], system: str = "") -> str:
 
 
 def chat(ref: str, messages: List[Dict], system: str = "") -> str:
-    """Point d'entrée unique : envoie la discussion au bon fournisseur"""
+    """Point d'entrée unique (réponse complète) : envoie la discussion au bon fournisseur"""
     pid, model = split_ref(ref)
     if pid == "ollama":
-        return chat_ollama(model, messages, system)
+        return chat_ollama(model, messages, system, _options_for(model, ref))
     p = get_provider(pid)
     if not p:
         return f"Erreur : fournisseur « {pid} » introuvable (onglet Connexions)."
     if not is_configured(p):
         return f"Erreur : {p['name']} n'est pas configuré (onglet Connexions)."
     return chat_remote(p, model, messages, system)
+
+
+# ------------------------------------------------------------ réponses mot par mot
+def _sse_data(response):
+    """Lignes « data: … » d'un flux SSE (OpenAI, Anthropic)"""
+    for raw in response.iter_lines(decode_unicode=False):
+        if not raw:
+            continue
+        line = raw.decode("utf-8", errors="replace")
+        if line.startswith("data:"):
+            yield line[5:].strip()
+
+
+def chat_stream(ref: str, messages: List[Dict], system: str = "", on_token=None,
+                should_stop=None) -> Tuple[str, Dict]:
+    """Envoie la discussion et reçoit la réponse au fil de l'eau.
+    on_token(texte) est appelé pour chaque morceau ; should_stop() permet d'interrompre.
+    Renvoie (texte complet, statistiques). Le texte commence par « Erreur » en cas d'échec."""
+    import json
+    import time
+
+    on_token = on_token or (lambda _t: None)
+    should_stop = should_stop or (lambda: False)
+    pid, model = split_ref(ref)
+    parts: List[str] = []
+    stats: Dict = {"stopped": False}
+    start = time.time()
+    first_token_at: Optional[float] = None
+
+    def emit(text: str):
+        nonlocal first_token_at
+        if text:
+            if first_token_at is None:
+                first_token_at = time.time()
+            parts.append(text)
+            on_token(text)
+
+    try:
+        if pid == "ollama":
+            options = _options_for(model, ref)
+            stats["options"] = options
+            body = {"model": model, "messages": _ollama_payload(messages, system), "stream": True}
+            if options:
+                body["options"] = options
+            with requests.post(f"{OLLAMA_URL}/api/chat", json=body, stream=True, timeout=(10, 900)) as r:
+                if r.status_code != 200:
+                    return f"Erreur Ollama : {r.status_code} {r.text[:200]}", stats
+                for raw in r.iter_lines():
+                    if should_stop():
+                        stats["stopped"] = True
+                        break
+                    if not raw:
+                        continue
+                    chunk = json.loads(raw)
+                    if chunk.get("error"):
+                        return f"Erreur Ollama : {chunk['error']}", stats
+                    emit(chunk.get("message", {}).get("content", ""))
+                    if chunk.get("done"):
+                        ec, ed = chunk.get("eval_count") or 0, chunk.get("eval_duration") or 0
+                        if ec and ed:
+                            stats["tokens"] = ec
+                            stats["tokens_per_s"] = ec / (ed / 1e9)
+        else:
+            p = get_provider(pid)
+            if not p:
+                return f"Erreur : fournisseur « {pid} » introuvable (onglet Connexions).", stats
+            if not is_configured(p):
+                return f"Erreur : {p['name']} n'est pas configuré (onglet Connexions).", stats
+            base = p["base_url"].rstrip("/")
+            if p["kind"] == "anthropic":
+                body = {"model": model, "max_tokens": 8192, "stream": True,
+                        "messages": _anthropic_messages(messages)}
+                if system.strip():
+                    body["system"] = system
+                url = f"{base}/messages"
+            else:
+                body = {"model": model, "stream": True, "messages": _openai_messages(messages, system)}
+                url = f"{base}/chat/completions"
+            with requests.post(url, headers=_headers(p), json=body, stream=True, timeout=(10, 900)) as r:
+                if r.status_code != 200:
+                    return f"Erreur {p['name']} {_error_text(r)}", stats
+                for data in _sse_data(r):
+                    if should_stop():
+                        stats["stopped"] = True
+                        break
+                    if data == "[DONE]":
+                        break
+                    try:
+                        event = json.loads(data)
+                    except ValueError:
+                        continue
+                    if p["kind"] == "anthropic":
+                        if event.get("type") == "content_block_delta":
+                            emit(event.get("delta", {}).get("text", ""))
+                        elif event.get("type") == "message_delta":
+                            stats["tokens"] = (event.get("usage") or {}).get("output_tokens")
+                        elif event.get("type") == "error":
+                            return f"Erreur {p['name']} : {event.get('error', {}).get('message', event)}", stats
+                    else:
+                        choices = event.get("choices") or []
+                        if choices:
+                            emit((choices[0].get("delta") or {}).get("content") or "")
+    except requests.exceptions.ConnectionError:
+        if pid == "ollama":
+            return "Ollama n'est pas lancé. Installez-le depuis ollama.com puis relancez.", stats
+        return f"Erreur : impossible de joindre le service ({pid}).", stats
+    except Exception as e:
+        if not parts:
+            return f"Erreur : {e}", stats
+        stats["stopped"] = True  # coupure en cours de route : on garde le début
+
+    text = "".join(parts)
+    elapsed = time.time() - (first_token_at or start)
+    if "tokens_per_s" not in stats and text and elapsed > 0:
+        tokens = stats.get("tokens") or max(1, len(text) // 4)
+        stats["tokens"] = tokens
+        stats["tokens_per_s"] = tokens / elapsed
+    stats["seconds"] = time.time() - start
+    return text, stats
 
 
 # ------------------------------------------------------------ ajout manuel dans Ollama

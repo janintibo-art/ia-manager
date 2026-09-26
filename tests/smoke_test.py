@@ -29,7 +29,7 @@ def hook(exc_type, exc_value, exc_tb):
 
 sys.excepthook = hook  # une erreur dans un clic doit faire échouer le test
 
-from PyQt6.QtCore import PYQT_VERSION_STR, QT_VERSION_STR, QEventLoop, QTimer  # noqa: E402
+from PyQt6.QtCore import PYQT_VERSION_STR, QT_VERSION_STR, QEventLoop, Qt, QTimer  # noqa: E402
 from PyQt6.QtGui import QFont  # noqa: E402
 from PyQt6.QtWidgets import QApplication, QPushButton  # noqa: E402
 
@@ -327,6 +327,173 @@ loop.exec()
 app.processEvents()
 print("Recherche réelle sur Hugging Face :", search.status.text())
 print("Onglet Recherche OK")
+
+# ------------------------------------------------------------- Livraison 1
+import json as _json  # noqa: E402
+import threading  # noqa: E402
+import time as _time  # noqa: E402
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer  # noqa: E402
+
+from src.backend import model_options as mo  # noqa: E402
+from src.backend import quick_commands as qc  # noqa: E402
+from src.ui import style as _style  # noqa: E402
+from src.ui.dialogs import ModelSettingsDialog, QuickCommandsDialog  # noqa: E402
+from src.ui.workers import SafeThread  # noqa: E402
+
+SSE_RECEIVED = {}
+
+
+class FakeSSE(BaseHTTPRequestHandler):
+    def log_message(self, *a):
+        pass
+
+    def do_POST(self):
+        body = _json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        SSE_RECEIVED["last"] = body
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.end_headers()
+        words = ["Hello", " world"] if "court" not in _json.dumps(body) else ["Hello", " world"]
+        slow = "lent" in _json.dumps(body)
+        chunks = [f"mot{i} " for i in range(40)] if slow else words
+        try:
+            for w_ in chunks:
+                self.wfile.write(f"data: {_json.dumps({'choices': [{'delta': {'content': w_}}]})}\n\n".encode())
+                self.wfile.flush()
+                _time.sleep(0.1 if slow else 0.01)
+            self.wfile.write(b"data: [DONE]\n\n")
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+
+server = ThreadingHTTPServer(("127.0.0.1", 0), FakeSSE)
+threading.Thread(target=server.serve_forever, daemon=True).start()
+pv.save_provider({"id": "sse", "name": "SSE test", "kind": "openai_compat",
+                  "base_url": f"http://127.0.0.1:{server.server_address[1]}/v1", "api_key": "",
+                  "models": ["flux"], "enabled": True})
+SSE_REF = "sse::flux"
+
+
+def wait_idle(timeout_ms=30000):
+    loop = QEventLoop()
+    t = QTimer()
+    t.setInterval(50)
+    t.timeout.connect(lambda: loop.quit() if not SafeThread._alive else None)
+    t.start()
+    QTimer.singleShot(timeout_ms, loop.quit)
+    loop.exec()
+    t.stop()
+    app.processEvents()
+    app.processEvents()
+
+
+chat.refresh_models()
+chat.project_select.setCurrentIndex(0)
+chat.clear_chat()
+assert chat.select_ref(SSE_REF), "serveur SSE dans la liste"
+
+# commande rapide + réponse en continu
+chat.message_input.setPlainText("/resume court texte à résumer")
+chat.send_message()
+assert chat.stop_btn.isVisibleTo(chat) and not chat.send_btn.isVisibleTo(chat), "bouton Stop visible"
+wait_idle()
+assert chat.messages[-1]["role"] == "assistant", chat.messages
+assert chat.messages[-1]["content"] == "Hello world", chat.messages[-1]
+assert chat.messages[-2]["display"] == "/resume court texte à résumer"
+assert chat.messages[-2]["content"].startswith("Résume le texte"), chat.messages[-2]["content"]
+assert "tokens/s" in chat.status.text(), chat.status.text()
+assert chat.send_btn.isVisibleTo(chat) and not chat.stop_btn.isVisibleTo(chat)
+print("Streaming OK :", chat.status.text())
+
+# bouton Stop
+chat.message_input.setPlainText("réponse lente")
+chat.send_message()
+QTimer.singleShot(400, chat.stop_generation)
+wait_idle()
+assert "interrompue" in chat.messages[-1]["content"], chat.messages[-1]
+assert chat.messages[-1]["content"].startswith("mot0"), chat.messages[-1]
+print("Stop OK :", chat.messages[-1]["content"][:40])
+
+# nouvelle discussion pendant une réponse
+chat.message_input.setPlainText("encore lent")
+chat.send_message()
+QTimer.singleShot(250, chat.clear_chat)
+wait_idle()
+assert not chat.messages, chat.messages
+print("Abandon pendant la réponse OK")
+
+# erreur réseau pendant le streaming
+chat.select_ref(FAKE_REF)
+chat.message_input.setPlainText("test erreur")
+chat.send_message()
+wait_idle()
+assert not chat.messages
+chat.select_ref(SSE_REF)
+
+# menu des commandes
+chat.fill_commands_menu()
+assert len(chat.commands_menu.actions()) >= len(qc.DEFAULT_COMMANDS)
+chat.insert_command("/traduis")
+assert chat.message_input.toPlainText().startswith("/traduis")
+chat.message_input.clear()
+dlg = QuickCommandsDialog(chat)
+dlg.add()
+dlg.trigger.setText("/Test Cmd")
+dlg.template.setPlainText("Fais {texte}")
+dlg.save()
+assert qc.expand("/testcmd bien")[0] == "Fais bien", qc.load()[-1]
+qc.reset()
+print("Commandes rapides OK")
+
+# réglages d'un modèle
+d1 = ModelSettingsDialog(FAKE_REF, None, chat)
+d2 = ModelSettingsDialog("ollama::qwen3:8b", {"vram_gb": 8.0, "ram_gb": 32.0}, chat)
+d2.mode.setCurrentIndex(d2.mode.findData("quality"))
+d2.ctx.setValue(12288)
+d2.layers.setValue(20)
+d2.temp.setValue(0.3)
+d2.save()
+saved_opts = mo.get_options("ollama::qwen3:8b")
+assert saved_opts["mode"] == "quality" and saved_opts["num_ctx"] == 12288 and saved_opts["gpu_layers"] == 20, saved_opts
+d3 = ModelSettingsDialog("ollama::qwen3:8b", None, chat)
+d3.reset()
+assert not mo.get_options("ollama::qwen3:8b")["custom"]
+assert chat.stats_text({"tokens_per_s": 12.5, "tokens": 100, "seconds": 8,
+                        "options": {"num_gpu": 20, "num_ctx": 8192}}).startswith("⚡ 12.5")
+print("Réglages VRAM/RAM OK :", d2.summary.text()[:80])
+
+# priorité de l'onglet Analyse = réglage général
+setup.prio_group.button(0).setChecked(True)
+setup.update_all()
+assert settings.get("default_mode") == "speed"
+setup.vram_slider.setValue(75)
+assert settings.get("vram_percent") == 75
+setup.prio_group.button(1).setChecked(True)
+setup.update_all()
+
+# recherche dans toutes les discussions
+projects.global_search.setText("Deuxième")
+projects.run_global_search()
+assert projects.global_results.isVisibleTo(projects) and projects.global_results.count() >= 1
+first = projects.global_results.item(0)
+assert first.data(Qt.ItemDataRole.UserRole), first.text()
+projects.open_global_result(first)
+assert chat.messages, "discussion rouverte depuis la recherche"
+projects.global_search.clear()
+assert not projects.global_results.isVisibleTo(projects)
+print("Recherche globale OK")
+
+# thème et taille de police
+w.change_appearance(toggle=True)
+assert _style.CURRENT_THEME == "clair" and settings.get("theme") == "clair"
+w.change_appearance(delta=2)
+assert settings.get("font_size") == _style.BASE_FONT_PT
+chat.render_message(len(chat.messages) - 1, SSE_REF)
+w.change_appearance(delta=-2)
+w.change_appearance(toggle=True)
+assert _style.CURRENT_THEME == "sombre"
+print("Thème / police OK")
+server.shutdown()
 
 w.close()
 app.processEvents()
