@@ -120,3 +120,7 @@ Une fiche Hugging Face, GitHub, ModelScope ou Civitai peut être exportée en JS
 ## Mise à jour v46
 
 Les résultats de recherche sont réutilisés pendant 120 secondes et restent consultables en mode hors ligne lorsqu'ils sont déjà en cache. Voir [le guide v46](MISE_A_JOUR_v46.md).
+
+## Mise à jour v47
+
+Les métadonnées des 100 dernières recherches sont conservées sur disque pour rester disponibles hors ligne après redémarrage, sans enregistrer de contenu sensible. Voir [le guide v47](MISE_A_JOUR_v47.md).

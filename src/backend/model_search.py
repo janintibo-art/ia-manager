@@ -5,6 +5,7 @@ import hashlib
 import re
 import time
 import json
+from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional
 
@@ -23,6 +24,7 @@ _DETAIL_CACHE = {}
 _DETAIL_TTL = 60
 _SEARCH_CACHE = {}
 _SEARCH_TTL = 120
+_SEARCH_CACHE_FILE = Path.home() / ".ia_manager" / "cache" / "search_results.json"
 
 
 def clear_detail_cache():
@@ -31,6 +33,30 @@ def clear_detail_cache():
 
 def clear_search_cache():
     _SEARCH_CACHE.clear()
+    try:
+        _SEARCH_CACHE_FILE.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def _load_search_disk():
+    try:
+        data = json.loads(_SEARCH_CACHE_FILE.read_text(encoding="utf-8")) if _SEARCH_CACHE_FILE.exists() else {}
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _save_search_disk(key, value):
+    try:
+        _SEARCH_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        data = _load_search_disk()
+        data["|".join(map(str, key))] = {"saved": time.time(), "results": value}
+        # Limite de taille : les métadonnées de recherche ne doivent jamais grossir sans limite.
+        entries = list(data.items())[-100:]
+        _SEARCH_CACHE_FILE.write_text(json.dumps(dict(entries), ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass
 
 
 def search_source(source: str, query: str, category=None, sort="trendingScore", french=False):
@@ -41,12 +67,17 @@ def search_source(source: str, query: str, category=None, sort="trendingScore", 
     if previous and (now - previous[0] < _SEARCH_TTL or settings.get("offline_mode")):
         return list(previous[1])
     if settings.get("offline_mode"):
+        saved = _load_search_disk().get("|".join(map(str, key)))
+        if saved and isinstance(saved.get("results"), list):
+            _SEARCH_CACHE[key] = (now, saved["results"])
+            return list(saved["results"])
         raise RuntimeError("Mode hors ligne : aucune recherche en cache pour cette requête.")
     loaders = {"github": lambda: search_github(query), "modelscope": lambda: search_modelscope(query),
                "civitai": lambda: search_civitai(query),
                "huggingface": lambda: search_hf(query, category, sort, french)}
     value = loaders[source]()
     _SEARCH_CACHE[key] = (now, value)
+    _save_search_disk(key, value)
     return value
 
 
