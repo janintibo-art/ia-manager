@@ -3,6 +3,7 @@
 IA Manager - Application desktop pour gérer les IA locales
 """
 
+import pkgutil  # noqa: F401  requis par PyQt6, a embarquer dans l exe
 import sys
 from pathlib import Path
 from src.ui.main_window import MainWindow
