@@ -47,10 +47,28 @@ def cleanup_cache(keep_history: bool = True) -> int:
         referenced = {str(item.get("path")) for item in entries} if keep_history else set()
         removed = 0
         if ROOT.exists():
-            for path in ROOT.glob("downloads/*"):
-                if path.is_file() and (path.name.endswith(".part") or str(path) not in referenced):
-                    try:
-                        path.unlink(); removed += 1
-                    except OSError:
-                        pass
+            for folder in (ROOT / "downloads", ROOT / "image_downloads"):
+                for path in folder.glob("*") if folder.exists() else []:
+                    if path.is_file() and (path.name.endswith(".part") or str(path) not in referenced):
+                        try:
+                            path.unlink(); removed += 1
+                        except OSError:
+                            pass
         return removed
+
+
+def cache_stats():
+    total = 0
+    files = 0
+    partial = 0
+    for folder in (ROOT / "downloads", ROOT / "image_downloads"):
+        if not folder.exists():
+            continue
+        for path in folder.glob("*"):
+            if path.is_file():
+                try:
+                    total += path.stat().st_size; files += 1
+                    partial += int(path.name.endswith(".part"))
+                except OSError:
+                    pass
+    return {"bytes": total, "files": files, "partial": partial}

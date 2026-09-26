@@ -489,11 +489,13 @@ class SearchTab(QWidget):
 
     def refresh_history(self):
         entries = download_history.list_entries()
-        if not entries:
-            self.history_label.setText("Historique : aucun modèle téléchargé depuis GitHub")
+        stats = download_history.cache_stats()
+        if not entries and not stats["files"]:
+            self.history_label.setText("Historique : aucun fichier téléchargé")
             return
-        total = sum(int(item.get("size") or 0) for item in entries)
-        self.history_label.setText(f"Historique : {len(entries)} modèle(s) · {gb(total)} conservés dans le cache")
+        self.history_label.setText(f"Cache : {stats['files']} fichier(s) · {gb(stats['bytes'])}" +
+                                   (f" · {stats['partial']} interrompu(s)" if stats['partial'] else "") +
+                                   f" · {len(entries)} entrée(s) historique")
 
     def clean_download_cache(self):
         removed = download_history.cleanup_cache()

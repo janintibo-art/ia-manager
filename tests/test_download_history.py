@@ -20,5 +20,14 @@ class DownloadHistoryTests(unittest.TestCase):
                 self.assertTrue(cached.exists())
                 self.assertFalse(temp.exists())
 
+    def test_stats_counts_image_cache(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder) / "models"
+            image = root / "image_downloads" / "style.safetensors"
+            image.parent.mkdir(parents=True); image.write_bytes(b"1234")
+            with patch.object(download_history, "ROOT", root), patch.object(download_history, "HISTORY", root / "history.json"):
+                stats = download_history.cache_stats()
+            self.assertEqual(stats, {"bytes": 4, "files": 1, "partial": 0})
+
 
 if __name__ == "__main__": unittest.main()

@@ -92,3 +92,7 @@ Les fichiers image disponibles sur Civitai peuvent être téléchargés avec pro
 ## Mise à jour v39
 
 La recherche et les téléchargements Civitai acceptent un jeton facultatif pour les limites API et les fichiers protégés. Le jeton reste masqué et exclu des sauvegardes et diagnostics. Voir [le guide v39](MISE_A_JOUR_v39.md).
+
+## Mise à jour v40
+
+Le cache des modèles GGUF et des fichiers image Civitai est maintenant suivi et nettoyé ensemble, avec affichage de l'espace occupé et des téléchargements interrompus. Voir [le guide v40](MISE_A_JOUR_v40.md).
