@@ -241,16 +241,11 @@ class SearchTab(QWidget):
         rid = self.request_id
         self.status.setText("⏳ Recherche en cours…")
         self.search_btn.setEnabled(False)
-        if self.source.currentIndex() == 1:
-            self.search_worker = FunctionWorker(ms.search_github, self.query.text())
-        elif self.source.currentIndex() == 2:
-            self.search_worker = FunctionWorker(ms.search_modelscope, self.query.text())
-        elif self.source.currentIndex() == 3:
-            self.search_worker = FunctionWorker(ms.search_civitai, self.query.text())
-        else:
-            self.search_worker = FunctionWorker(
-                ms.search_hf, self.query.text(), ms.CATEGORIES[self.category.currentText()],
-                ms.SORTS[self.sort.currentText()], self.french.isChecked())
+        self.search_worker = FunctionWorker(
+            ms.search_source, self.current_source_key(), self.query.text(),
+            ms.CATEGORIES[self.category.currentText()] if self.source.currentIndex() == 0 else None,
+            ms.SORTS[self.sort.currentText()] if self.source.currentIndex() == 0 else "trendingScore",
+            self.french.isChecked() if self.source.currentIndex() == 0 else False)
         self.search_worker.done.connect(lambda ok, res, r=rid: self.on_results(r, ok, res))
         self.search_worker.start()
 

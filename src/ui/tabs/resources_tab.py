@@ -44,6 +44,7 @@ class ResourcesTab(QWidget):
         self.ai.invalidate_model_cache()
         model_options._meta_cache.clear()
         model_search.clear_detail_cache()
+        model_search.clear_search_cache()
         self.memory.setText("Caches IA vidés. Les prochains rafraîchissements reliront Ollama.")
         self.update_queue()
 

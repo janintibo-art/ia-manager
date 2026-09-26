@@ -21,10 +21,33 @@ CIVITAI_API = "https://civitai.com/api/v1/models"
 CIVITAI_SITE = "https://civitai.com/models"
 _DETAIL_CACHE = {}
 _DETAIL_TTL = 60
+_SEARCH_CACHE = {}
+_SEARCH_TTL = 120
 
 
 def clear_detail_cache():
     _DETAIL_CACHE.clear()
+
+
+def clear_search_cache():
+    _SEARCH_CACHE.clear()
+
+
+def search_source(source: str, query: str, category=None, sort="trendingScore", french=False):
+    """Recherche unifiée avec cache court et réutilisation en mode hors ligne."""
+    key = (source, query.strip(), category, sort, bool(french))
+    now = time.monotonic()
+    previous = _SEARCH_CACHE.get(key)
+    if previous and (now - previous[0] < _SEARCH_TTL or settings.get("offline_mode")):
+        return list(previous[1])
+    if settings.get("offline_mode"):
+        raise RuntimeError("Mode hors ligne : aucune recherche en cache pour cette requête.")
+    loaders = {"github": lambda: search_github(query), "modelscope": lambda: search_modelscope(query),
+               "civitai": lambda: search_civitai(query),
+               "huggingface": lambda: search_hf(query, category, sort, french)}
+    value = loaders[source]()
+    _SEARCH_CACHE[key] = (now, value)
+    return value
 
 
 def export_details(path: str, details: Dict) -> str:

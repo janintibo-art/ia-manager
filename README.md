@@ -116,3 +116,7 @@ Les fiches détaillées des modèles sont conservées 60 secondes pour accélér
 ## Mise à jour v45
 
 Une fiche Hugging Face, GitHub, ModelScope ou Civitai peut être exportée en JSON, sans README volumineux ni secrets. Voir [le guide v45](MISE_A_JOUR_v45.md).
+
+## Mise à jour v46
+
+Les résultats de recherche sont réutilisés pendant 120 secondes et restent consultables en mode hors ligne lorsqu'ils sont déjà en cache. Voir [le guide v46](MISE_A_JOUR_v46.md).
