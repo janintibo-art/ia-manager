@@ -307,6 +307,72 @@ QSplitter::handle {{
     width: 10px;
 }}
 
+/* Atelier v53 : surfaces, navigation et retours d'interaction. */
+QFrame#NavigationRail {{
+    background-color: {SURFACE};
+    border: 1px solid {BORDER};
+    border-radius: 16px;
+}}
+QFrame#NavigationRail QLabel, QFrame#NavigationRail QWidget {{
+    background: transparent;
+}}
+QFrame#NavigationRail QLabel#Brand {{ font-size: {BASE_FONT_PT + 5}pt; }}
+QLabel#NavigationCaption {{
+    color: {TEXT_MUTED};
+    font-size: {max(9, BASE_FONT_PT - 3)}pt;
+    font-weight: 600;
+    background: transparent;
+}}
+QListWidget#StudioNavigation {{
+    background: transparent;
+    border: none;
+    padding: 0;
+    min-width: {BASE_FONT_PT * 17}px;
+    max-width: {BASE_FONT_PT * 17}px;
+    outline: none;
+}}
+QListWidget#StudioNavigation::item {{
+    padding: 8px 12px;
+    margin: 2px 0;
+    border: 1px solid transparent;
+    border-radius: 8px;
+}}
+QListWidget#StudioNavigation::item:disabled {{
+    color: {TEXT_MUTED};
+    background: transparent;
+    border: none;
+    padding: 14px 12px 4px 12px;
+}}
+QListWidget#StudioNavigation::item:selected {{
+    background: {SURFACE_2};
+    color: {TEXT};
+    border: 1px solid {ACCENT};
+    border-left: 4px solid {ACCENT};
+}}
+QListWidget#StudioNavigation::item:hover:enabled {{ background: {SURFACE_2}; }}
+QFrame#StudioHeader {{
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                stop:0 {SURFACE_2}, stop:1 {SURFACE});
+    border: 1px solid {BORDER};
+    border-radius: 14px;
+}}
+QFrame#StudioHeader QLabel {{ background: transparent; }}
+QPushButton:pressed {{ background: {BORDER}; }}
+QPushButton:focus, QComboBox:focus, QListWidget:focus {{ border: 1px solid {ACCENT}; }}
+QPushButton#Primary:pressed {{ background: {ACCENT_HOVER}; }}
+QTextEdit, QPlainTextEdit, QLineEdit {{
+    selection-background-color: {ACCENT};
+    selection-color: white;
+}}
+QScrollBar:horizontal {{ background: transparent; height: 12px; }}
+QScrollBar::handle:horizontal {{ background: {BORDER}; border-radius: 6px; min-width: 30px; }}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0; }}
+QScrollBar::handle:vertical:hover, QScrollBar::handle:horizontal:hover {{ background: {TEXT_MUTED}; }}
+QMenu {{ background: {SURFACE}; border: 1px solid {BORDER}; padding: 6px; }}
+QMenu::item {{ padding: 8px 20px; border-radius: 6px; }}
+QMenu::item:selected {{ background: {SURFACE_2}; color: {TEXT}; }}
+QMenu::separator {{ height: 1px; background: {BORDER}; margin: 5px; }}
+
 QToolTip {{
     background-color: {SURFACE_2};
     color: {TEXT};

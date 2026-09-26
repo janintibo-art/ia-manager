@@ -1,0 +1,105 @@
+"""Habillage de navigation, indépendant du fonctionnement des onglets."""
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import (
+    QFrame, QHBoxLayout, QLabel, QListWidget, QListWidgetItem,
+    QSizePolicy, QVBoxLayout, QWidget,
+)
+
+# Indices conservés pour les raccourcis et les liens entre écrans existants.
+SECTIONS = (
+    ("CRÉER", ((4, "Chat", "Échangez avec vos modèles et donnez forme à vos idées."),
+                (3, "Projets", "Retrouvez vos consignes, fichiers et conversations."),
+                (12, "Espace de travail", "Préparez vos documents, profils et essais."))),
+    ("EXPLORER", ((1, "Modèles", "Organisez les modèles disponibles sur votre machine."),
+                   (2, "Recherche", "Découvrez et téléchargez de nouveaux modèles."),
+                   (5, "Comparateur", "Confrontez les réponses de plusieurs modèles."),
+                   (7, "Test de vitesse", "Mesurez les performances de votre configuration."))),
+    ("PILOTER", ((0, "Analyse", "Faites le point sur votre matériel et votre installation."),
+                  (6, "Tableau de bord", "Gardez une vue d’ensemble de votre atelier."),
+                  (8, "Tâches", "Organisez vos générations et leurs résultats."),
+                  (9, "Connexions", "Configurez vos moteurs locaux et vos services API."),
+                  (10, "GitHub", "Retrouvez les outils de gestion de vos dépôts."),
+                  (11, "Obliteratus", "Accédez à votre atelier spécialisé et à son journal."))),
+    ("APPRENDRE", ((13, "Tuto", "Des explications et des conseils pour avancer à votre rythme."),)),
+)
+
+
+class StudioShell(QWidget):
+    def __init__(self, tabs, appearance, parent=None):
+        super().__init__(parent)
+        self.tabs = tabs
+        self.entries = {}
+        self.setObjectName("StudioShell")
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(12, 12, 16, 12)
+        outer.setSpacing(18)
+        rail = QFrame()
+        rail.setObjectName("NavigationRail")
+        rail.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+        left = QVBoxLayout(rail)
+        left.setContentsMargins(12, 18, 12, 12)
+        brand = QLabel("IA Manager")
+        brand.setObjectName("Brand")
+        left.addWidget(brand)
+        caption = QLabel("VOTRE ATELIER IA")
+        caption.setObjectName("NavigationCaption")
+        left.addWidget(caption)
+        left.addSpacing(16)
+        self.navigation = QListWidget()
+        self.navigation.setObjectName("StudioNavigation")
+        self.navigation.setAccessibleName("Navigation principale")
+        self.navigation.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        for section, entries in SECTIONS:
+            heading = QListWidgetItem(section)
+            heading.setFlags(Qt.ItemFlag.NoItemFlags)
+            self.navigation.addItem(heading)
+            for index, title, subtitle in entries:
+                item = QListWidgetItem(title)
+                item.setData(Qt.ItemDataRole.UserRole, index)
+                item.setToolTip(subtitle)
+                self.navigation.addItem(item)
+                self.entries[index] = (item, title, subtitle, section)
+        left.addWidget(self.navigation, 1)
+        left.addWidget(appearance)
+        outer.addWidget(rail)
+        body = QVBoxLayout()
+        body.setSpacing(12)
+        header = QFrame()
+        header.setObjectName("StudioHeader")
+        head = QVBoxLayout(header)
+        head.setContentsMargins(20, 16, 20, 16)
+        self.section = QLabel()
+        self.section.setObjectName("NavigationCaption")
+        self.title = QLabel()
+        self.title.setObjectName("Title")
+        self.subtitle = QLabel()
+        self.subtitle.setObjectName("Subtitle")
+        self.subtitle.setWordWrap(True)
+        for label in (self.section, self.title, self.subtitle):
+            head.addWidget(label)
+        body.addWidget(header)
+        tabs.tabBar().hide()
+        body.addWidget(tabs, 1)
+        outer.addLayout(body, 1)
+        self.navigation.currentItemChanged.connect(self._navigate)
+        tabs.currentChanged.connect(self._sync)
+        self._sync(tabs.currentIndex())
+
+    def _navigate(self, item, previous):
+        if item is not None:
+            index = item.data(Qt.ItemDataRole.UserRole)
+            if index is not None:
+                self.tabs.setCurrentIndex(index)
+
+    def _sync(self, index):
+        entry = self.entries.get(index)
+        if entry is None:
+            return
+        item, title, subtitle, section = entry
+        self.navigation.blockSignals(True)
+        self.navigation.setCurrentItem(item)
+        self.navigation.scrollToItem(item)
+        self.navigation.blockSignals(False)
+        self.section.setText(section)
+        self.title.setText(title)
+        self.subtitle.setText(subtitle)

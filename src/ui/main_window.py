@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
 
 from src.backend import code_tools, settings
 from src.ui import style
+from src.ui.navigation import StudioShell
 from src.backend import tasks as tk
 from src.ui.tabs.bench_tab import BenchTab
 from src.ui.tabs.chat_tab import ChatTab
@@ -112,31 +113,8 @@ class MainWindow(QMainWindow):
 
         self.tray: Optional[QSystemTrayIcon] = None
         self.setup_tray()
-        self.tabs.setCornerWidget(self.build_appearance_buttons())
-
-        central = QWidget()
-        layout = QVBoxLayout(central)
-        layout.setContentsMargins(18, 12, 18, 18)
-        hero = QFrame()
-        hero.setObjectName("Hero")
-        hero_lay = QHBoxLayout(hero)
-        hero_lay.setContentsMargins(18, 10, 18, 10)
-        brand = QLabel("IA")
-        brand.setObjectName("BrandAccent")
-        hero_lay.addWidget(brand)
-        brand2 = QLabel(" Manager")
-        brand2.setObjectName("Brand")
-        hero_lay.addWidget(brand2)
-        tagline = QLabel("Votre atelier local pour découvrir, tester et organiser vos IA")
-        tagline.setObjectName("Muted")
-        hero_lay.addWidget(tagline, 1)
-        for text in ("LOCAL", "MULTI-SOURCES", "HORS LIGNE"):
-            pill = QLabel(text)
-            pill.setObjectName("Pill")
-            hero_lay.addWidget(pill)
-        layout.addWidget(hero)
-        layout.addWidget(self.tabs)
-        self.setCentralWidget(central)
+        self.studio_shell = StudioShell(self.tabs, self.build_appearance_buttons())
+        self.setCentralWidget(self.studio_shell)
 
     # ------------------------------------------------------------ liens entre onglets
     def on_models_changed(self):
@@ -223,6 +201,7 @@ class MainWindow(QMainWindow):
                                 ("🌓", "Thème clair / sombre", lambda: self.change_appearance(toggle=True))):
             b = QPushButton(text)
             b.setToolTip(tip)
+            b.setAccessibleName(tip)
             b.setStyleSheet("padding: 4px 10px;")
             b.clicked.connect(slot)
             lay.addWidget(b)
