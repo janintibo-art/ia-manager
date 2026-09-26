@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
 
 from src.backend import model_registry as reg
 from src.backend import model_search as ms
+from src.backend import providers as pv
 from src.backend.ai_manager import AIManager
 from src.backend.system_analyzer import SystemAnalyzer
 from src.ui import style
@@ -37,6 +38,7 @@ class SearchTab(QWidget):
         self.search_worker: Optional[FunctionWorker] = None
         self.detail_worker: Optional[FunctionWorker] = None
         self.dl_worker: Optional[DownloadWorker] = None
+        self.github_worker: Optional[FunctionWorker] = None
         self.request_id = 0
         self.detail_request = 0
         try:
@@ -54,8 +56,8 @@ class SearchTab(QWidget):
         title = QLabel("Moteur de recherche d'IA")
         title.setObjectName("Title")
         root.addWidget(title)
-        sub = QLabel("Explorez plus de 100 000 modèles au format GGUF publiés sur Hugging Face, puis "
-                     "téléchargez-les en un clic dans Ollama. La version conseillée est choisie selon votre PC.")
+        sub = QLabel("Cherchez des modèles sur Hugging Face ou GitHub, puis installez les fichiers GGUF "
+                     "compatibles directement dans Ollama.")
         sub.setObjectName("Subtitle")
         sub.setWordWrap(True)
         root.addWidget(sub)
@@ -66,6 +68,10 @@ class SearchTab(QWidget):
         self.query.setClearButtonEnabled(True)
         self.query.returnPressed.connect(self.search)
         row.addWidget(self.query, 3)
+        self.source = QComboBox()
+        self.source.addItems(["🤗 Hugging Face", "🐙 GitHub (GGUF)"])
+        self.source.currentIndexChanged.connect(self.source_changed)
+        row.addWidget(self.source, 1)
         self.category = QComboBox()
         self.category.addItems(list(ms.CATEGORIES))
         row.addWidget(self.category, 1)
@@ -184,14 +190,27 @@ class SearchTab(QWidget):
         self.query.setText(term)
         self.search()
 
+    def source_changed(self):
+        github = self.source.currentIndex() == 1
+        self.category.setVisible(not github)
+        self.sort.setVisible(not github)
+        self.french.setVisible(not github)
+        self.hf_btn.setText("🌐 Voir sur GitHub" if github else "🌐 Voir sur Hugging Face")
+        self.result_list.clear(); self.quant_list.clear(); self.details = None
+        self.detail.setHtml(self.welcome_html())
+        self.update_buttons()
+
     def search(self):
         self.request_id += 1
         rid = self.request_id
         self.status.setText("⏳ Recherche en cours…")
         self.search_btn.setEnabled(False)
-        self.search_worker = FunctionWorker(
-            ms.search_hf, self.query.text(), ms.CATEGORIES[self.category.currentText()],
-            ms.SORTS[self.sort.currentText()], self.french.isChecked())
+        if self.source.currentIndex() == 1:
+            self.search_worker = FunctionWorker(ms.search_github, self.query.text())
+        else:
+            self.search_worker = FunctionWorker(
+                ms.search_hf, self.query.text(), ms.CATEGORIES[self.category.currentText()],
+                ms.SORTS[self.sort.currentText()], self.french.isChecked())
         self.search_worker.done.connect(lambda ok, res, r=rid: self.on_results(r, ok, res))
         self.search_worker.start()
 
@@ -204,12 +223,16 @@ class SearchTab(QWidget):
             return
         self.results = list(result)
         self.result_list.clear()
+        github = self.source.currentIndex() == 1
         for m in self.results:
-            lock = " 🔒" if m["gated"] else ""
-            kind = "🖼️ " if m["pipeline"] == "image-text-to-text" else ""
-            item = QListWidgetItem(
-                f"{kind}{m['name']}{lock}\n      {m['author']} · ⬇ {ms.human_number(m['downloads'])} · "
-                f"♥ {ms.human_number(m['likes'])} · {ms.fmt_date(m['updated'])}")
+            if github:
+                item = QListWidgetItem(f"🐙 {m['id']}\n      ⭐ {ms.human_number(m['downloads'])} · {m.get('description','')[:100]}")
+            else:
+                lock = " 🔒" if m["gated"] else ""
+                kind = "🖼️ " if m["pipeline"] == "image-text-to-text" else ""
+                item = QListWidgetItem(
+                    f"{kind}{m['name']}{lock}\n      {m['author']} · ⬇ {ms.human_number(m['downloads'])} · "
+                    f"♥ {ms.human_number(m['likes'])} · {ms.fmt_date(m['updated'])}")
             item.setData(Qt.ItemDataRole.UserRole, m["id"])
             item.setToolTip(m["id"])
             self.result_list.addItem(item)
@@ -228,7 +251,7 @@ class SearchTab(QWidget):
         self.quant_list.clear()
         self.detail.setHtml(f"<h2>{html.escape(repo)}</h2><p>⏳ Chargement de la fiche…</p>")
         self.update_buttons()
-        self.detail_worker = FunctionWorker(ms.model_details, repo)
+        self.detail_worker = FunctionWorker(ms.github_details if self.source.currentIndex() == 1 else ms.model_details, repo)
         self.detail_worker.done.connect(lambda ok, res, r=rid, rp=repo: self.on_details(r, rp, ok, res))
         self.detail_worker.start()
 
@@ -251,7 +274,11 @@ class SearchTab(QWidget):
                 rows.append(f"<tr><td style='color:{muted}; padding:4px 16px 4px 0'>{label}</td>"
                             f"<td style='padding:4px 0'><b>{html.escape(str(value))}</b></td></tr>")
 
-        row("Auteur", d["author"])
+        if d.get("pipeline") == "github":
+            row("Source", "GitHub · releases GGUF")
+            row("Dépôt", d["id"])
+        else:
+            row("Auteur", d["author"])
         row("Taille", ms.readable_params(d["params"]) + (" de paramètres" if d["params"] else ""))
         row("Architecture", d["architecture"])
         row("Contexte", f"{d['context']:,} tokens".replace(",", " ") if d["context"] else "")
@@ -275,13 +302,14 @@ class SearchTab(QWidget):
             f"<table cellspacing='0'>{''.join(rows)}</table>"
             + (f"<h3>Présentation (extrait)</h3><p style='color:{muted}'>{excerpt}</p>" if excerpt else ""))
 
-        best = ms.best_quant(d["quants"], self.system_info)
+        best = ms.best_quant(d["quants"], self.system_info) if d.get("pipeline") != "github" else next(
+            (q["quant"] for q in d["quants"] if not q["split"]), None)
         installed = set(self.ai_manager.get_available_models())
         self.quant_list.clear()
         for q in reversed(d["quants"]):
             fit = ms.fit_for_size(q["size"], self.system_info)
             icon, fit_title, _ = reg.FIT_LABELS[fit]
-            name = ms.ollama_name(d["id"], q["quant"])
+            name = ms.ollama_name(d["id"], q["quant"]) if d.get("pipeline") != "github" else q.get("asset", "")
             extras = []
             if q["quant"] == best:
                 extras.append("⭐ conseillé")
@@ -315,7 +343,8 @@ class SearchTab(QWidget):
     def open_on_hf(self):
         item = self.result_list.currentItem()
         if item:
-            QDesktopServices.openUrl(QUrl(f"{ms.HF_SITE}/{item.data(Qt.ItemDataRole.UserRole)}"))
+            base = ms.GITHUB_SITE if self.source.currentIndex() == 1 else ms.HF_SITE
+            QDesktopServices.openUrl(QUrl(f"{base}/{item.data(Qt.ItemDataRole.UserRole)}"))
 
     # ------------------------------------------------------------ téléchargement
     def start_download(self, name: str, size_text: str = ""):
@@ -342,7 +371,27 @@ class SearchTab(QWidget):
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
             if reply != QMessageBox.StandardButton.Yes:
                 return
+        if self.details.get("pipeline") == "github":
+            self.download_github(q)
+            return
         self.start_download(ms.ollama_name(self.details["id"], q["quant"]), f"({gb(q['size'])})")
+
+    def download_github(self, asset: Dict):
+        if not self.ai_manager.is_ollama_running():
+            QMessageBox.warning(self, "Ollama absent", "Ollama doit être installé et lancé pour installer ce GGUF.")
+            return
+        name = re.sub(r"[^a-z0-9._/-]+", "-", asset.get("asset", "modele").lower()).replace(".gguf", "")[:60].strip("-.")
+        if not pv.valid_model_name(name):
+            name = "github-modele"
+        self.progress.setVisible(True)
+        self.dl_status.setText(f"⏳ Téléchargement puis installation de {asset.get('asset','')}…")
+        self.github_worker = FunctionWorker(self.install_github_asset, self.details["id"], asset, name)
+        self.github_worker.done.connect(lambda ok, result, n=name: self.on_downloaded(ok, str(result) if not ok else "", n))
+        self.github_worker.start()
+
+    def install_github_asset(self, repo: str, asset: Dict, name: str):
+        path = ms.download_github_gguf(repo, asset)
+        return pv.create_from_gguf(name, path)
 
     def download_ollama_name(self):
         name = self.ollama_name.text().strip()

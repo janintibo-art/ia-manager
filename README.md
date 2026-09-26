@@ -60,3 +60,7 @@ Le **mode hors ligne** bloque les services distants et la recherche web tout en 
 ## Mise à jour v31
 
 La configuration peut être exportée puis restaurée depuis **Connexions**. La sauvegarde exclut les clés API et la restauration les conserve sur l'appareil lorsqu'elles existent déjà. Voir [le guide v31](MISE_A_JOUR_v31.md).
+
+## Mise à jour v32
+
+La recherche propose désormais **GitHub (GGUF)**, avec lecture des releases et installation directe dans Ollama. Hugging Face, Ollama et l'import de fichiers GGUF locaux restent disponibles. Voir [le guide v32](MISE_A_JOUR_v32.md).

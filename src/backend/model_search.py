@@ -9,6 +9,8 @@ import requests
 
 HF_API = "https://huggingface.co/api/models"
 HF_SITE = "https://huggingface.co"
+GITHUB_API = "https://api.github.com"
+GITHUB_SITE = "https://github.com"
 
 SORTS = {
     "🔥 Tendances": "trendingScore",
@@ -72,6 +74,66 @@ def search_hf(query: str = "", category: Optional[str] = None, sort: str = "tren
     r = requests.get(HF_API, params=params, timeout=timeout)
     r.raise_for_status()
     return [parse_listing(m) for m in r.json()]
+
+
+def search_github(query: str = "", limit: int = 30, timeout: int = 20) -> List[Dict]:
+    """Recherche des dépôts GitHub qui publient des modèles ou des fichiers GGUF."""
+    terms = (query.strip() + " gguf").strip() if query.strip() else "gguf language model"
+    r = requests.get(f"{GITHUB_API}/search/repositories",
+                     params={"q": terms, "sort": "stars", "order": "desc", "per_page": limit},
+                     headers={"Accept": "application/vnd.github+json"}, timeout=timeout)
+    r.raise_for_status()
+    return [parse_github_listing(item) for item in r.json().get("items", [])]
+
+
+def parse_github_listing(item: Dict) -> Dict:
+    return {"id": item.get("full_name", ""), "name": item.get("name", ""),
+            "author": (item.get("owner") or {}).get("login", ""),
+            "downloads": int(item.get("stargazers_count") or 0),
+            "likes": int(item.get("forks_count") or 0), "updated": item.get("updated_at", ""),
+            "description": item.get("description") or "", "html_url": item.get("html_url", ""),
+            "pipeline": "github", "gated": False, "tags": item.get("topics", [])}
+
+
+def github_details(repo: str, timeout: int = 20) -> Dict:
+    """Retourne les assets GGUF des releases GitHub, installables dans Ollama."""
+    headers = {"Accept": "application/vnd.github+json"}
+    rr = requests.get(f"{GITHUB_API}/repos/{repo}/releases", params={"per_page": 10},
+                      headers=headers, timeout=timeout)
+    rr.raise_for_status()
+    assets = []
+    for release in rr.json():
+        for asset in release.get("assets", []):
+            name = asset.get("name", "")
+            if name.lower().endswith(".gguf") and "mmproj" not in name.lower():
+                assets.append({"quant": quant_of(name) or "GGUF", "size": int(asset.get("size") or 0),
+                               "files": [name], "split": bool(SPLIT_RE.search(name)),
+                               "download_url": asset.get("browser_download_url", ""),
+                               "asset": name, "release": release.get("tag_name", "")})
+    return {"id": repo, "author": repo.split("/")[0], "license": "", "base_model": "",
+            "architecture": "", "context": 0, "params": 0, "languages": [], "pipeline": "github",
+            "downloads": 0, "likes": 0, "updated": "", "gated": False, "readme": "",
+            "quants": assets, "html_url": f"{GITHUB_SITE}/{repo}"}
+
+
+def download_github_gguf(repo: str, asset: Dict, timeout: int = 60) -> str:
+    """Télécharge un asset GGUF dans le cache local et renvoie son chemin."""
+    from pathlib import Path
+    target_dir = Path.home() / ".ia_manager" / "models" / "downloads"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "_", f"{repo.replace('/', '_')}_{asset['asset']}")
+    target = target_dir / safe
+    if not target.exists() or target.stat().st_size != int(asset.get("size") or 0):
+        with requests.get(asset["download_url"], stream=True, timeout=timeout,
+                          headers={"Accept": "application/octet-stream"}) as r:
+            r.raise_for_status()
+            temp = target.with_suffix(target.suffix + ".part")
+            with temp.open("wb") as out:
+                for chunk in r.iter_content(chunk_size=1024 * 1024):
+                    if chunk:
+                        out.write(chunk)
+            temp.replace(target)
+    return str(target)
 
 
 def parse_listing(m: Dict) -> Dict:
