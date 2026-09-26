@@ -248,6 +248,20 @@ class ProjectManager:
         out.write_text("\n".join(lines), encoding="utf-8")
         return out
 
+    def export_conversation_pdf(self, pid: str, cid: str) -> Path:
+        """Exporte une discussion en PDF dans le dossier fichiers/"""
+        from src.backend import export_tools
+        data = self.load_conversation(pid, cid)
+        out = self.files_folder(pid) / f"{slugify(data.get('title', cid))}_{cid}.pdf"
+        return export_tools.export_pdf(data, str(out))
+
+    def export_conversation_docx(self, pid: str, cid: str) -> Path:
+        """Exporte une discussion en Word (.docx) dans le dossier fichiers/"""
+        from src.backend import export_tools
+        data = self.load_conversation(pid, cid)
+        out = self.files_folder(pid) / f"{slugify(data.get('title', cid))}_{cid}.docx"
+        return export_tools.export_docx(data, str(out))
+
 
 def sort_projects(projects: List[Dict], mode: str) -> List[Dict]:
     """Classement : favoris d'abord, puis selon le mode choisi"""

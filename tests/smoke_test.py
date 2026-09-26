@@ -152,6 +152,21 @@ projects.reload(select=pid)
 projects.inner_tabs.setCurrentIndex(1)
 projects.conv_list.setCurrentRow(0)
 projects.export_conversation()
+
+import zipfile  # noqa: E402
+
+pdf_out = projects.pm.export_conversation_pdf(pid, convs[0]["id"])
+assert pdf_out.exists() and pdf_out.read_bytes()[:4] == b"%PDF", pdf_out
+docx_out = projects.pm.export_conversation_docx(pid, convs[0]["id"])
+assert zipfile.is_zipfile(docx_out), docx_out
+with zipfile.ZipFile(docx_out) as zf:
+    doc_xml = zf.read("word/document.xml").decode("utf-8")
+assert "Bonjour" in doc_xml, doc_xml[:200]
+projects.export_conversation_pdf()
+projects.export_conversation_docx()
+assert "créé" in projects.saves_status.text(), projects.saves_status.text()
+print("Export PDF/Word OK :", pdf_out.name, docx_out.name)
+
 projects.open_selected_conversation()
 assert chat.conv_id == convs[0]["id"] and len(chat.messages) == 4, "reprise"
 projects.pm.rename_conversation(pid, convs[0]["id"], "Titre renommé")

@@ -227,6 +227,12 @@ class ProjectsTab(QWidget):
         export_btn = QPushButton("📄 Exporter en texte")
         export_btn.clicked.connect(self.export_conversation)
         row1.addWidget(export_btn)
+        export_pdf_btn = QPushButton("📕 PDF")
+        export_pdf_btn.clicked.connect(self.export_conversation_pdf)
+        row1.addWidget(export_pdf_btn)
+        export_docx_btn = QPushButton("📘 Word")
+        export_docx_btn.clicked.connect(self.export_conversation_docx)
+        row1.addWidget(export_docx_btn)
         del_btn = QPushButton("🗑 Supprimer")
         del_btn.setObjectName("Danger")
         del_btn.clicked.connect(self.delete_conversation)
@@ -555,6 +561,26 @@ class ProjectsTab(QWidget):
             return
         out = self.pm.export_conversation_markdown(self.current_pid, cid)
         self.saves_status.setText(f"✅ Exporté : {out}")
+
+    def export_conversation_pdf(self):
+        cid = self.selected_conversation()
+        if not (self.current_pid and cid):
+            return
+        try:
+            out = self.pm.export_conversation_pdf(self.current_pid, cid)
+            self.saves_status.setText(f"✅ PDF créé : {html.escape(str(out))}")
+        except Exception as e:
+            self.saves_status.setText(f"❌ Export PDF impossible : {html.escape(str(e))}")
+
+    def export_conversation_docx(self):
+        cid = self.selected_conversation()
+        if not (self.current_pid and cid):
+            return
+        try:
+            out = self.pm.export_conversation_docx(self.current_pid, cid)
+            self.saves_status.setText(f"✅ Word créé : {html.escape(str(out))}")
+        except Exception as e:
+            self.saves_status.setText(f"❌ Export Word impossible : {html.escape(str(e))}")
 
     def delete_conversation(self):
         cid = self.selected_conversation()
