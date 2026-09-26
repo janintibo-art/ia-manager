@@ -26,6 +26,14 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
+      - name: Smoke test (Qt + ouverture de la fenetre)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          pip show PyQt6 PyQt6-Qt6
+          python -c "from PyQt6.QtCore import PYQT_VERSION_STR, QT_VERSION_STR; print('PyQt', PYQT_VERSION_STR, 'Qt', QT_VERSION_STR)"
+          python -c "import sys; from PyQt6.QtWidgets import QApplication; app = QApplication(sys.argv); from src.ui.main_window import MainWindow; w = MainWindow(); w.show(); print('Fenetre OK')"
+
       - name: Build EXE
         run: pyinstaller --onefile --windowed --name ia_manager --hidden-import pkgutil main.py
 
