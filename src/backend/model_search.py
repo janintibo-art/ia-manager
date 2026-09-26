@@ -7,11 +7,20 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 import requests
+from src.backend import settings
 
 HF_API = "https://huggingface.co/api/models"
 HF_SITE = "https://huggingface.co"
 GITHUB_API = "https://api.github.com"
 GITHUB_SITE = "https://github.com"
+
+
+def github_headers() -> Dict[str, str]:
+    headers = {"Accept": "application/vnd.github+json"}
+    token = str(settings.get("github_token") or "").strip()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
 
 SORTS = {
     "🔥 Tendances": "trendingScore",
@@ -82,7 +91,9 @@ def search_github(query: str = "", limit: int = 30, timeout: int = 20) -> List[D
     terms = (query.strip() + " gguf").strip() if query.strip() else "gguf language model"
     r = requests.get(f"{GITHUB_API}/search/repositories",
                      params={"q": terms, "sort": "stars", "order": "desc", "per_page": limit},
-                     headers={"Accept": "application/vnd.github+json"}, timeout=timeout)
+                     headers=github_headers(), timeout=timeout)
+    if r.status_code == 403:
+        raise RuntimeError("Limite GitHub atteinte. Ajoutez un jeton facultatif dans Connexions, puis réessayez.")
     r.raise_for_status()
     return [parse_github_listing(item) for item in r.json().get("items", [])]
 
@@ -98,7 +109,7 @@ def parse_github_listing(item: Dict) -> Dict:
 
 def github_details(repo: str, timeout: int = 20) -> Dict:
     """Retourne les assets GGUF des releases GitHub, installables dans Ollama."""
-    headers = {"Accept": "application/vnd.github+json"}
+    headers = github_headers()
     rr = requests.get(f"{GITHUB_API}/repos/{repo}/releases", params={"per_page": 10},
                       headers=headers, timeout=timeout)
     rr.raise_for_status()

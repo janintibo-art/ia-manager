@@ -72,3 +72,7 @@ Les téléchargements GitHub affichent leur progression, peuvent être annulés 
 ## Mise à jour v34
 
 Un historique local des modèles GitHub installés indique le nombre de fichiers et l'espace occupé. Le nettoyage retire les téléchargements temporaires ou devenus inutiles sans supprimer les modèles Ollama. Voir [le guide v34](MISE_A_JOUR_v34.md).
+
+## Mise à jour v35
+
+La recherche GitHub accepte un jeton facultatif pour éviter les limites de l'API. Le jeton reste masqué et n'est pas exporté dans les diagnostics ou sauvegardes. Voir [le guide v35](MISE_A_JOUR_v35.md).

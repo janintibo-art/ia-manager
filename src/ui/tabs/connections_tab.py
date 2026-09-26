@@ -304,6 +304,10 @@ class ConnectionsTab(QWidget):
         self.searxng_url = QLineEdit(settings.get("searxng_url") or "")
         self.searxng_url.setPlaceholderText("http://mon-serveur:8080 (facultatif)")
         web_form.addRow("Adresse SearXNG :", self.searxng_url)
+        self.github_token = QLineEdit(settings.get("github_token") or "")
+        self.github_token.setEchoMode(QLineEdit.EchoMode.Password)
+        self.github_token.setPlaceholderText("Jeton GitHub facultatif (augmente la limite de recherche)")
+        web_form.addRow("Jeton GitHub :", self.github_token)
         lay.addLayout(web_form)
         web_row = QHBoxLayout()
         brave_key_btn = QPushButton("🔑 Obtenir une clé Brave")
@@ -374,6 +378,7 @@ class ConnectionsTab(QWidget):
     def save_web_settings(self):
         settings.set("brave_key", self.brave_key.text().strip())
         settings.set("searxng_url", self.searxng_url.text().strip())
+        settings.set("github_token", self.github_token.text().strip())
         self.web_status.setText("✅ Enregistré.")
 
     # ------------------------------------------------------ serveurs compatibles

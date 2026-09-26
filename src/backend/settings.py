@@ -24,6 +24,7 @@ DEFAULTS: Dict[str, Any] = {
     "web_search": False,
     "brave_key": "",
     "searxng_url": "",
+    "github_token": "",
     "offline_mode": False,
 }
 
