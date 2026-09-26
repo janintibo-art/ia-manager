@@ -48,3 +48,7 @@ Protection du contexte : jauge colorée, avertissement à 75/90 % et blocage pr�
 ## Mise à jour v28
 
 Deux profils spécialisés sont disponibles : **Architecte Code** et **Directeur Artistique Image**. Ils utilisent le modèle choisi et fournissent des consignes détaillées pour vos projets. Voir [le guide v28](MISE_A_JOUR_v28.md).
+
+## Mise à jour v29
+
+Optimisations de performance : caches partagés pour Ollama, réglages relus seulement si nécessaire, index documentaire SQLite en WAL et bouton de vidage des caches IA. Voir [le guide v29](MISE_A_JOUR_v29.md).

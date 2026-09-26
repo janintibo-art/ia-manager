@@ -1,6 +1,8 @@
 """Gestionnaire principal des IA (via Ollama)"""
 
 from pathlib import Path
+from threading import RLock
+import time
 from typing import Dict, List
 
 import requests
@@ -9,6 +11,9 @@ from src.backend.model_registry import MODELS
 
 
 class AIManager:
+    _cache_lock = RLock()
+    _models_cache = {}
+    _running_cache = {}
     """Orchestration des IA locales via le serveur Ollama"""
 
     def __init__(self):
@@ -25,15 +30,31 @@ class AIManager:
     def get_catalog(self) -> List[Dict]:
         return MODELS
 
-    def get_available_models(self) -> List[str]:
-        """Liste des modèles installés dans Ollama"""
+    def get_available_models(self, force: bool = False) -> List[str]:
+        """Liste des modèles installés dans Ollama, partagée 10 secondes entre les onglets."""
+        now = time.monotonic()
+        with self._cache_lock:
+            cached = self._models_cache.get(self.ollama_url)
+            if cached and not force and now - cached[0] < 10:
+                return list(cached[1])
         try:
             response = requests.get(f"{self.ollama_url}/api/tags", timeout=2)
             if response.status_code == 200:
-                return [m["name"] for m in response.json().get("models", [])]
+                models = [m["name"] for m in response.json().get("models", [])]
+                with self._cache_lock:
+                    self._models_cache[self.ollama_url] = (now, models)
+                return models
         except Exception:
             pass
-        return []
+        return list(cached[1]) if cached else []
+
+    @classmethod
+    def invalidate_model_cache(cls, url: str = ""):
+        with cls._cache_lock:
+            if url:
+                cls._models_cache.pop(url, None)
+            else:
+                cls._models_cache.clear()
 
     def chat(self, model: str, message: str) -> str:
         """Envoyer un message et récupérer la réponse complète"""
@@ -65,6 +86,7 @@ class AIManager:
         )
         if response.status_code != 200:
             raise RuntimeError(f"Ollama a répondu {response.status_code} : {response.text[:200]}")
+        self.invalidate_model_cache(self.ollama_url)
         return True
 
     def delete_model(self, model_name: str) -> bool:
@@ -75,19 +97,29 @@ class AIManager:
                 json={"name": model_name},
                 timeout=30,
             )
+            if response.status_code == 200:
+                self.invalidate_model_cache(self.ollama_url)
             return response.status_code == 200
         except Exception:
             return False
 
-    def list_running(self) -> List[Dict]:
-        """IA actuellement chargées en mémoire (VRAM/RAM) par Ollama"""
+    def list_running(self, force: bool = False) -> List[Dict]:
+        """IA actuellement chargées en mémoire (VRAM/RAM), cache de 2 secondes."""
+        now = time.monotonic()
+        with self._cache_lock:
+            cached = self._running_cache.get(self.ollama_url)
+            if cached and not force and now - cached[0] < 2:
+                return [dict(item) for item in cached[1]]
         try:
             response = requests.get(f"{self.ollama_url}/api/ps", timeout=3)
             if response.status_code == 200:
-                return response.json().get("models", [])
+                models = response.json().get("models", [])
+                with self._cache_lock:
+                    self._running_cache[self.ollama_url] = (now, models)
+                return [dict(item) for item in models]
         except Exception:
             pass
-        return []
+        return [dict(item) for item in cached[1]] if cached else []
 
     def unload_model(self, model_name: str) -> bool:
         """Décharger une IA de la mémoire tout de suite (keep_alive: 0)"""

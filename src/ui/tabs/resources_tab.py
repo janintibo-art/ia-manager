@@ -1,7 +1,7 @@
 """État mémoire et commandes explicites de déchargement Ollama."""
 from PyQt6.QtWidgets import QWidget,QVBoxLayout,QLabel,QCheckBox,QPushButton,QListWidget,QListWidgetItem,QMessageBox
 from PyQt6.QtCore import Qt,QTimer
-from src.backend import settings,local_jobs,dashboard
+from src.backend import settings,local_jobs,dashboard,model_options
 from src.backend.ai_manager import AIManager
 from src.ui.workers import FunctionWorker
 
@@ -28,6 +28,9 @@ class ResourcesTab(QWidget):
         self.refresh_btn.clicked.connect(self.refresh);lay.addWidget(self.refresh_btn)
         self.unload_btn=QPushButton("Décharger le modèle Ollama sélectionné")
         self.unload_btn.clicked.connect(self.unload);lay.addWidget(self.unload_btn)
+        self.cache_btn=QPushButton("Rafraîchir les caches IA")
+        self.cache_btn.setToolTip("Force la relecture des modèles et de leurs métadonnées au prochain appel.")
+        self.cache_btn.clicked.connect(self.clear_caches);lay.addWidget(self.cache_btn)
         self.timer=QTimer(self);self.timer.timeout.connect(self.update_queue);self.timer.start(1000)
         self.update_queue()
 
@@ -35,6 +38,12 @@ class ResourcesTab(QWidget):
         state=local_jobs.state()
         self.queue.setText("Actif : " +(state['active'] or 'aucun') + "\nEn attente : " + (", ".join(state['waiting']) or 'aucun'))
         self.unload_btn.setEnabled(self.worker is None and not state['active'] and not state['waiting'])
+
+    def clear_caches(self):
+        self.ai.invalidate_model_cache()
+        model_options._meta_cache.clear()
+        self.memory.setText("Caches IA vidés. Les prochains rafraîchissements reliront Ollama.")
+        self.update_queue()
 
     def refresh(self):
         if self.worker:return

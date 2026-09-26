@@ -11,6 +11,8 @@ CONFIG_DIR = Path.home() / ".ia_manager" / "config"
 SETTINGS_FILE = CONFIG_DIR / "settings.json"
 
 _LOCK = RLock()
+_CACHE = None
+_CACHE_MTIME = None
 
 DEFAULTS: Dict[str, Any] = {
     "projects_dir": str(Path.home() / "IA Manager" / "Projets"),
@@ -26,13 +28,19 @@ DEFAULTS: Dict[str, Any] = {
 
 
 def load() -> Dict[str, Any]:
-    data = dict(DEFAULTS)
-    try:
-        if SETTINGS_FILE.exists():
-            data.update(json.loads(SETTINGS_FILE.read_text(encoding="utf-8")))
-    except Exception:
-        pass
-    return data
+    global _CACHE, _CACHE_MTIME
+    with _LOCK:
+        try:
+            mtime = SETTINGS_FILE.stat().st_mtime_ns if SETTINGS_FILE.exists() else None
+            if _CACHE is not None and mtime == _CACHE_MTIME:
+                return dict(_CACHE)
+            data = dict(DEFAULTS)
+            if SETTINGS_FILE.exists():
+                data.update(json.loads(SETTINGS_FILE.read_text(encoding="utf-8")))
+            _CACHE, _CACHE_MTIME = data, mtime
+            return dict(data)
+        except Exception:
+            return dict(_CACHE or DEFAULTS)
 
 
 def get(key: str) -> Any:
@@ -52,6 +60,9 @@ def set(key: str, value: Any) -> None:  # noqa: A001 - nom volontairement simple
                 stream.flush()
                 os.fsync(stream.fileno())
             os.replace(name, SETTINGS_FILE)
+            global _CACHE, _CACHE_MTIME
+            _CACHE = dict(data)
+            _CACHE_MTIME = SETTINGS_FILE.stat().st_mtime_ns
         finally:
             if os.path.exists(name):
                 os.unlink(name)

@@ -16,6 +16,10 @@ def connect(folder):
     path = Path(folder) / "memoire.sqlite3"
     path.parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(path, timeout=10)
+    db.execute("PRAGMA journal_mode=WAL")
+    db.execute("PRAGMA synchronous=NORMAL")
+    db.execute("PRAGMA temp_store=MEMORY")
+    db.execute("PRAGMA cache_size=-4096")
     db.execute("CREATE TABLE IF NOT EXISTS documents (id TEXT PRIMARY KEY, name TEXT, chars INTEGER)")
     db.execute("CREATE TABLE IF NOT EXISTS passages (doc TEXT, number INTEGER, text TEXT, folded TEXT)")
     try:
