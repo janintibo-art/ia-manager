@@ -308,14 +308,14 @@ def chat_stream(ref: str, messages: List[Dict], system: str = "", on_token=None,
     pid, model = split_ref(ref)
     parts: List[str] = []
     stats: Dict = {"stopped": False}
-    start = time.time()
+    start = time.perf_counter()
     first_token_at: Optional[float] = None
 
     def emit(text: str):
         nonlocal first_token_at
         if text:
             if first_token_at is None:
-                first_token_at = time.time()
+                first_token_at = time.perf_counter()
             parts.append(text)
             on_token(text)
 
@@ -394,12 +394,13 @@ def chat_stream(ref: str, messages: List[Dict], system: str = "", on_token=None,
         stats["stopped"] = True  # coupure en cours de route : on garde le début
 
     text = "".join(parts)
-    elapsed = time.time() - (first_token_at or start)
-    if "tokens_per_s" not in stats and text and elapsed > 0:
+    # perf_counter : horloge précise (time.time() n'avance que toutes les ~15 ms sous Windows)
+    elapsed = max(time.perf_counter() - (first_token_at or start), 0.001)
+    if "tokens_per_s" not in stats and text:
         tokens = stats.get("tokens") or max(1, len(text) // 4)
         stats["tokens"] = tokens
         stats["tokens_per_s"] = tokens / elapsed
-    stats["seconds"] = time.time() - start
+    stats["seconds"] = time.perf_counter() - start
     return text, stats
 
 
