@@ -93,6 +93,7 @@ for row in range(models.category_list.count()):
     for r in range(models.model_list.count()):
         models.model_list.setCurrentRow(r)
     print("Categorie", models.category_list.item(row).text(), ":", models.model_list.count())
+models.category_list.setCurrentRow(0)  # revenir sur « Tous » avant de chercher
 models.search.setText("mistral")
 assert models.model_list.count() > 0, "recherche"
 models.search.clear()
