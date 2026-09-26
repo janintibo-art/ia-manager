@@ -26,6 +26,11 @@ def github_headers() -> Dict[str, str]:
         headers["Authorization"] = f"Bearer {token}"
     return headers
 
+
+def civitai_headers() -> Dict[str, str]:
+    token = str(settings.get("civitai_token") or "").strip()
+    return {"Authorization": f"Bearer {token}"} if token else {}
+
 SORTS = {
     "🔥 Tendances": "trendingScore",
     "⬇ Plus téléchargés": "downloads",
@@ -136,7 +141,8 @@ def modelscope_details(repo: str, timeout: int = 20) -> Dict:
 def search_civitai(query: str = "", limit: int = 30, timeout: int = 20) -> List[Dict]:
     """Recherche publique Civitai pour modèles image, LoRA, VAE et embeddings."""
     r = requests.get(CIVITAI_API, params={"query": query.strip(), "limit": min(limit, 100),
-                                          "sort": "Most Downloaded", "nsfw": "false"}, timeout=timeout)
+                                          "sort": "Most Downloaded", "nsfw": "false"},
+                     headers=civitai_headers(), timeout=timeout)
     r.raise_for_status()
     return [parse_civitai_listing(item) for item in (r.json().get("items") or [])]
 
@@ -151,7 +157,7 @@ def parse_civitai_listing(item: Dict) -> Dict:
 
 
 def civitai_details(model_id: str, timeout: int = 20) -> Dict:
-    r = requests.get(f"{CIVITAI_API}/{model_id}", timeout=timeout)
+    r = requests.get(f"{CIVITAI_API}/{model_id}", headers=civitai_headers(), timeout=timeout)
     r.raise_for_status()
     item = parse_civitai_listing(r.json())
     files = []
@@ -179,6 +185,7 @@ def download_civitai_file(asset: Dict, timeout: int = 60, on_progress=None, shou
     part = target.with_suffix(target.suffix + ".part")
     current = part.stat().st_size if part.exists() else 0
     headers = {"Range": f"bytes={current}-"} if current else {}
+    headers.update(civitai_headers())
     with requests.get(asset["download_url"], stream=True, timeout=timeout, headers=headers) as r:
         r.raise_for_status()
         append = current > 0 and r.status_code == 206

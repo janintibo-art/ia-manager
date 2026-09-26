@@ -25,6 +25,7 @@ DEFAULTS: Dict[str, Any] = {
     "brave_key": "",
     "searxng_url": "",
     "github_token": "",
+    "civitai_token": "",
     "offline_mode": False,
 }
 

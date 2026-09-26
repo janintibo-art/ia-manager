@@ -18,7 +18,8 @@ def snapshot():
             "settings": {"theme": settings.get("theme"), "font_size": settings.get("font_size"),
                          "project_memory_enabled": settings.get("project_memory_enabled"),
                          "serialize_local_jobs": settings.get("serialize_local_jobs"),
-                         "github_token_configured": bool(settings.get("github_token"))},
+                         "github_token_configured": bool(settings.get("github_token")),
+                         "civitai_token_configured": bool(settings.get("civitai_token"))},
             "system": info, "providers": safe_providers}
 
 
