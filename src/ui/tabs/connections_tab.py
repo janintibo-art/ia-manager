@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
 )
 
 from src.backend import providers as pv
-from src.backend import settings, diagnostics
+from src.backend import settings, diagnostics, settings_backup
 from src.backend.ai_manager import AIManager
 from src.ui import style
 from src.ui.workers import DownloadWorker, FunctionWorker
@@ -316,6 +316,12 @@ class ConnectionsTab(QWidget):
         diag = QPushButton("📋 Exporter un diagnostic sans secrets")
         diag.clicked.connect(self.export_diagnostic)
         web_row.addWidget(diag)
+        backup = QPushButton("💾 Sauvegarder la configuration")
+        backup.clicked.connect(self.export_backup)
+        web_row.addWidget(backup)
+        restore = QPushButton("📂 Restaurer")
+        restore.clicked.connect(self.import_backup)
+        web_row.addWidget(restore)
         web_row.addStretch()
         lay.addLayout(web_row)
         self.web_status = QLabel()
@@ -332,6 +338,38 @@ class ConnectionsTab(QWidget):
             self.web_status.setText(f"✅ Diagnostic créé sans clés API ni conversations : {path}")
         except Exception as error:
             self.web_status.setText(f"❌ Diagnostic impossible : {error}")
+
+    def export_backup(self):
+        path, _ = QFileDialog.getSaveFileName(self, "Sauvegarder la configuration", "ia_manager_config.json",
+                                              "Configuration JSON (*.json)")
+        if not path:
+            return
+        try:
+            settings_backup.export_file(path)
+            self.web_status.setText("✅ Configuration sauvegardée sans clés API. Les clés restent sur cet appareil.")
+        except Exception as error:
+            self.web_status.setText(f"❌ Sauvegarde impossible : {error}")
+
+    def import_backup(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Restaurer une configuration", "",
+                                              "Configuration JSON (*.json)")
+        if not path:
+            return
+        reply = QMessageBox.question(self, "Restaurer la configuration",
+                                     "Les réglages actuels seront remplacés. Continuer ?",
+                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            count = settings_backup.import_file(path)
+            self.offline.setChecked(bool(settings.get("offline_mode")))
+            self.brave_key.clear()
+            self.searxng_url.setText(settings.get("searxng_url") or "")
+            self.refresh_custom_list()
+            self.web_status.setText(f"✅ {count} réglages restaurés. Les clés API existantes ont été conservées.")
+            self.providers_changed.emit()
+        except Exception as error:
+            self.web_status.setText(f"❌ Restauration impossible : {error}")
 
     def save_web_settings(self):
         settings.set("brave_key", self.brave_key.text().strip())

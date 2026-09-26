@@ -56,3 +56,7 @@ Optimisations de performance : caches partagés pour Ollama, réglages relus seu
 ## Mise à jour v30
 
 Le **mode hors ligne** bloque les services distants et la recherche web tout en laissant les moteurs locaux disponibles. Un bouton exporte aussi un diagnostic JSON sans clés API, URL, prompts ni conversations. Voir [le guide v30](MISE_A_JOUR_v30.md).
+
+## Mise à jour v31
+
+La configuration peut être exportée puis restaurée depuis **Connexions**. La sauvegarde exclut les clés API et la restauration les conserve sur l'appareil lorsqu'elles existent déjà. Voir [le guide v31](MISE_A_JOUR_v31.md).
