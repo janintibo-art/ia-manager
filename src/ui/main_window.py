@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
 from src.backend import code_tools, settings
 from src.ui import style
 from src.backend import tasks as tk
+from src.ui.tabs.bench_tab import BenchTab
 from src.ui.tabs.chat_tab import ChatTab
 from src.ui.tabs.comparator_tab import ComparatorTab
 from src.ui.tabs.connections_tab import ConnectionsTab
@@ -51,6 +52,7 @@ class MainWindow(QMainWindow):
         self.github_tab = GithubTab()
         self.dashboard_tab = DashboardTab()
         self.comparator_tab = ComparatorTab()
+        self.bench_tab = BenchTab()
 
         self.tabs.addTab(self.setup_tab, "⚙️ Analyse")
         self.tabs.addTab(self.models_tab, "📦 Modèles")
@@ -59,6 +61,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.chat_tab, "💬 Chat")
         self.tabs.addTab(self.comparator_tab, "⚖️ Comparateur")
         self.tabs.addTab(self.dashboard_tab, "📊 Tableau de bord")
+        self.tabs.addTab(self.bench_tab, "🏁 Test de vitesse")
         self.tabs.addTab(self.tasks_tab, "⏰ Tâches")
         self.tabs.addTab(self.connections_tab, "🔌 Connexions")
         self.tabs.addTab(self.github_tab, "🐙 GitHub")
@@ -71,6 +74,8 @@ class MainWindow(QMainWindow):
         self.setup_tab.analysis_done.connect(self.models_tab.set_system_info)
         self.setup_tab.analysis_done.connect(self.search_tab.set_system_info)
         self.setup_tab.analysis_done.connect(self.chat_tab.set_system_info)
+        self.setup_tab.analysis_done.connect(self.bench_tab.set_system_info)
+        self.tabs.currentChanged.connect(self.on_tab_changed)
         self.search_tab.models_changed.connect(self.on_models_changed)
         self.dashboard_tab.models_changed.connect(self.on_models_changed)
         self.setup_tab.show_model.connect(self.open_model)
@@ -110,6 +115,11 @@ class MainWindow(QMainWindow):
         self.projects_tab.refresh_models()
         self.tasks_tab.refresh_models()
         self.comparator_tab.refresh_models()
+
+    def on_tab_changed(self, _index: int):
+        # Le test de vitesse lit le matériel et les modèles à la première ouverture de l'onglet
+        if self.tabs.currentWidget() is self.bench_tab and self.bench_tab.hw is None:
+            self.bench_tab.scan()
 
     def on_projects_changed(self):
         self.chat_tab.refresh_projects()

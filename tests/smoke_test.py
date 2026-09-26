@@ -434,6 +434,108 @@ lm_server.shutdown()
 lmstudio.BASE_URL = "http://127.0.0.1:9"
 print("LM Studio OK :", board.hint.text())
 
+# ------------------------------------------------------------- Test de vitesse
+from src.backend import benchmark as bm  # noqa: E402
+
+
+class FakeEngines(_BH):
+    """Faux Ollama + faux LM Studio sur le même port"""
+
+    def log_message(self, *a):
+        pass
+
+    def _send(self, obj, code=200):
+        b = _j.dumps(obj).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(b)))
+        self.end_headers()
+        self.wfile.write(b)
+
+    def do_GET(self):
+        if self.path == "/api/tags":
+            return self._send({"models": [{"name": "qwen3:8b", "size": 5_225_000_000, "details": {
+                "parameter_size": "8.2B", "quantization_level": "Q4_K_M", "family": "qwen3"}}]})
+        if self.path == "/api/ps":
+            return self._send({"models": [{"name": "qwen3:8b", "size": 6_000_000_000, "size_vram": 0}]})
+        if self.path == "/api/v1/models":
+            return self._send({"models": [{"type": "llm", "key": "google/gemma-test", "display_name": "Gemma test",
+                                           "quantization": {"name": "Q4_K_M", "bits_per_weight": 4},
+                                           "size_bytes": 3_000_000_000, "params_string": "4B",
+                                           "max_context_length": 32768, "loaded_instances": []}]})
+        return self._send({}, 404)
+
+    def do_POST(self):
+        body = _j.loads(self.rfile.read(int(self.headers["Content-Length"])) or b"{}")
+        if self.path == "/api/show":
+            return self._send({"details": {"quantization_level": "Q4_K_M"}, "model_info": {
+                "general.parameter_count": 8190735360, "qwen3.block_count": 36, "qwen3.context_length": 40960,
+                "qwen3.attention.head_count": 32, "qwen3.attention.head_count_kv": 8,
+                "qwen3.embedding_length": 4096}})
+        if self.path == "/api/generate":
+            if body.get("keep_alive") == 0:
+                return self._send({"done": True})
+            return self._send({"load_duration": 2_500_000_000, "prompt_eval_count": 80,
+                               "prompt_eval_duration": 200_000_000, "eval_count": 200,
+                               "eval_duration": 4_000_000_000, "total_duration": 6_800_000_000})
+        if self.path == "/api/v1/chat":
+            return self._send({"stats": {"input_tokens": 90, "total_output_tokens": 200, "tokens_per_second": 42.5,
+                                         "time_to_first_token_seconds": 0.31, "model_load_time_seconds": 3.2}})
+        return self._send({}, 404)
+
+
+eng = _TS(("127.0.0.1", 0), FakeEngines)
+_th.Thread(target=eng.serve_forever, daemon=True).start()
+eng_url = f"http://127.0.0.1:{eng.server_address[1]}"
+bench = w.bench_tab
+bench.ai_manager.ollama_url = eng_url
+bm.OLLAMA_URL = eng_url
+lmstudio.BASE_URL = eng_url
+
+
+def wait_until(cond, timeout_ms=30000):
+    lp = QEventLoop()
+    tm = QTimer()
+    tm.setInterval(50)
+    tm.timeout.connect(lambda: lp.quit() if cond() else None)
+    tm.start()
+    QTimer.singleShot(timeout_ms, lp.quit)
+    lp.exec()
+    tm.stop()
+    app.processEvents()
+
+
+bench.set_system_info(setup.info)
+bench.catalog_check.setChecked(True)  # lance l'analyse
+wait_until(lambda: not (bench.scan_worker and bench.scan_worker.isRunning()) and bench.hw is not None)
+refs = [p["ref"] for p in bench.profiles]
+assert "ollama::qwen3:8b" in refs, refs
+assert any(p["source"] == "lmstudio" for p in bench.profiles), refs
+assert any(p["source"] == "catalogue" for p in bench.profiles), "catalogue"
+assert bench.table.rowCount() == len(bench.profiles), (bench.table.rowCount(), len(bench.profiles))
+q8 = bench.profile("ollama::qwen3:8b")
+assert q8["layers"] == 36 and q8["kv_heads"] == 8 and q8["head_dim"] == 128, q8
+for i in range(bench.usage.count()):
+    bench.usage.setCurrentIndex(i)
+for row in range(bench.table.rowCount()):
+    if bench.table.item(row, 0).data(Qt.ItemDataRole.UserRole + 1) == "ollama::qwen3:8b":
+        bench.table.selectRow(row)
+assert "Base de calcul" in bench.details.toPlainText(), bench.details.toPlainText()[:200]
+lm_prof = next(p for p in bench.profiles if p["source"] == "lmstudio")
+bench.start_queue([q8, lm_prof])
+wait_until(lambda: bench.current is None and not bench.queue, 60000)
+assert bench.results["ollama::qwen3:8b"]["gen_tps"] == 50.0, bench.results.get("ollama::qwen3:8b")
+assert bench.results["ollama::qwen3:8b"]["load_s"] == 2.5
+assert bench.results[lm_prof["ref"]]["gen_tps"] == 42.5, bench.results.get(lm_prof["ref"])
+assert bm.load_results()["ollama::qwen3:8b"]["ttft_s"] == 2.7
+assert "Mesure réelle" in bench.details.toPlainText() or bench.selected_refs()
+print("Test de vitesse OK :", bench.status.text())
+w.tabs.setCurrentWidget(bench)
+w.tabs.setCurrentIndex(0)
+eng.shutdown()
+lmstudio.BASE_URL = "http://127.0.0.1:9"
+bm.OLLAMA_URL = "http://localhost:11434"
+
 # ------------------------------------------------------------- Recherche d'IA
 search = w.search_tab
 search.request_id += 1
