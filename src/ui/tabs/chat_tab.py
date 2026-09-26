@@ -198,6 +198,15 @@ class ChatTab(QWidget):
         self.profile_instructions = ""
         self.profile_label = QLabel("Profil : aucun")
         root.addWidget(self.profile_label)
+        context_row = QHBoxLayout()
+        self.context_label = QLabel("Contexte : 0 token")
+        context_row.addWidget(self.context_label)
+        self.compact_btn = QPushButton("Réduire l’historique")
+        self.compact_btn.setToolTip("Conserve les derniers échanges et remplace les anciens par un repère.")
+        self.compact_btn.clicked.connect(self.compact_history)
+        self.compact_btn.setEnabled(False)
+        context_row.addWidget(self.compact_btn)
+        root.addLayout(context_row)
         self.hint = QLabel()
         self.hint.setObjectName("Muted")
         self.hint.setWordWrap(True)
@@ -493,6 +502,32 @@ class ChatTab(QWidget):
         self.chat_display.document().addResource(QTextDocument.ResourceType.ImageResource.value, url, img)
         return f"<img src='{url.toString()}'> "
 
+    def estimate_context(self):
+        chars = sum(len(m.get("content", "")) for m in self.messages)
+        tokens = max(0, chars // 4)
+        self.context_label.setText(f"Contexte estimé : {tokens:,} tokens · {chars:,} caractères".replace(",", " "))
+        self.compact_btn.setEnabled(len(self.messages) >= 8)
+        return tokens
+
+    def compact_history(self):
+        if len(self.messages) < 8:
+            return
+        keep = 6
+        old = self.messages[:-keep]
+        first = next((m.get("display", m.get("content", "")) for m in old if m.get("role") == "user"), "")
+        marker = {"role": "system", "content": f"Historique précédent condensé localement ({len(old)} messages). Première demande : {first[:240]}"}
+        self.messages = [marker] + self.messages[-keep:]
+        self.chat_display.clear()
+        self.system_message("🧹 Historique ancien réduit pour libérer du contexte.")
+        for index in range(1, len(self.messages)):
+            self.render_message(index, self.stream_ref or self.current_ref())
+        self.estimate_context()
+        try:
+            self.save_current(self.current_ref())
+        except Exception:
+            pass
+        self.status.setText("Historique réduit : les derniers échanges sont conservés.")
+
     def render_message(self, index: int, model_ref: str):
         m = self.messages[index]
         if m["role"] == "user":
@@ -695,6 +730,7 @@ class ChatTab(QWidget):
             self.send_btn.setVisible(True)
             self.stop_btn.setVisible(False)
         self.messages = []
+        self.estimate_context()
         self.conv_id = None
         self.conv_created = None
         self.chat_display.clear()
@@ -723,6 +759,7 @@ class ChatTab(QWidget):
         data = self.pm.load_conversation(pid, cid)
         self.reset_conversation()
         self.messages = [dict(m) for m in data.get("messages", [])]
+        self.estimate_context()
         self.conv_id = cid
         self.conv_created = data.get("created")
         ref = data.get("model", "")
@@ -812,6 +849,7 @@ class ChatTab(QWidget):
         if command:
             message["display"] = text
         self.messages.append(message)
+        self.estimate_context()
         self.render_message(len(self.messages) - 1, ref)
         self.pending = []
         self.refresh_attach_bar()
@@ -936,6 +974,7 @@ class ChatTab(QWidget):
                 f"- [D{i}] {r['name']} — passage {r['passage']}" for i, r in enumerate(self.memory_sources, 1))
             self.memory_sources = []
         self.messages.append({"role": "assistant", "content": text})
+        self.estimate_context()
         self.render_message(len(self.messages) - 1, ref)
         if self.web_sources:
             links = " · ".join(f"<a href='{html.escape(s['url'])}'>{html.escape(s['title'] or s['url'])}</a>"
