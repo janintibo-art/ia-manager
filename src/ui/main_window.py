@@ -59,6 +59,7 @@ class MainWindow(QMainWindow):
         self.obliteratus_tab = ObliteratusTab()
         self.workspace_tab = WorkspaceTab()
         self.tutorial_tab = TutorialTab()
+        self.tutorial_tab.open_tab.connect(self.open_named_tab)
         self.workspace_tab.apply_profile.connect(self.apply_work_profile)
         self.workspace_tab.trials.compare_models.connect(self.compare_trial_models)
         self.workspace_tab.set_models([self.chat_tab.model_select.itemData(i) for i in range(self.chat_tab.model_select.count())])
@@ -128,6 +129,13 @@ class MainWindow(QMainWindow):
         self.tasks_tab.refresh_models()
         self.comparator_tab.refresh_models()
         self.workspace_tab.set_models([self.chat_tab.model_select.itemData(i) for i in range(self.chat_tab.model_select.count())])
+
+    def open_named_tab(self, name: str):
+        tabs = {"search": self.search_tab, "connections": self.connections_tab,
+                "chat": self.chat_tab, "workspace": self.workspace_tab}
+        target = tabs.get(name)
+        if target is not None:
+            self.tabs.setCurrentWidget(target)
 
     def on_tab_changed(self, _index: int):
         # Le test de vitesse lit le matériel et les modèles à la première ouverture de l'onglet

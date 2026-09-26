@@ -1,6 +1,6 @@
 """Guide intégré, consultable sans réseau."""
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QLineEdit, QTextBrowser, QVBoxLayout, QWidget
+from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtWidgets import QHBoxLayout, QLineEdit, QPushButton, QTextBrowser, QVBoxLayout, QWidget
 
 
 GUIDE = """
@@ -39,9 +39,19 @@ GUIDE = """
 
 
 class TutorialTab(QWidget):
+    open_tab = pyqtSignal(str)
+
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout(self)
+        actions = QHBoxLayout()
+        for label, target in (("🔍 Ouvrir Recherche", "search"), ("🔌 Ouvrir Connexions", "connections"),
+                              ("💬 Ouvrir Chat", "chat"), ("📚 Ouvrir Espace de travail", "workspace")):
+            button = QPushButton(label)
+            button.clicked.connect(lambda _checked=False, name=target: self.open_tab.emit(name))
+            actions.addWidget(button)
+        actions.addStretch()
+        layout.addLayout(actions)
         self.search = QLineEdit()
         self.search.setPlaceholderText("🔎 Rechercher un conseil dans le tuto…")
         self.search.setClearButtonEnabled(True)
