@@ -13,6 +13,7 @@ from src.backend import code_tools, settings
 from src.ui import style
 from src.backend import tasks as tk
 from src.ui.tabs.chat_tab import ChatTab
+from src.ui.tabs.comparator_tab import ComparatorTab
 from src.ui.tabs.connections_tab import ConnectionsTab
 from src.ui.tabs.dashboard_tab import DashboardTab
 from src.ui.tabs.github_tab import GithubTab
@@ -49,12 +50,14 @@ class MainWindow(QMainWindow):
         self.connections_tab = ConnectionsTab()
         self.github_tab = GithubTab()
         self.dashboard_tab = DashboardTab()
+        self.comparator_tab = ComparatorTab()
 
         self.tabs.addTab(self.setup_tab, "⚙️ Analyse")
         self.tabs.addTab(self.models_tab, "📦 Modèles")
         self.tabs.addTab(self.search_tab, "🔍 Recherche")
         self.tabs.addTab(self.projects_tab, "📁 Projets")
         self.tabs.addTab(self.chat_tab, "💬 Chat")
+        self.tabs.addTab(self.comparator_tab, "⚖️ Comparateur")
         self.tabs.addTab(self.dashboard_tab, "📊 Tableau de bord")
         self.tabs.addTab(self.tasks_tab, "⏰ Tâches")
         self.tabs.addTab(self.connections_tab, "🔌 Connexions")
@@ -105,6 +108,7 @@ class MainWindow(QMainWindow):
         self.setup_tab.refresh_installed()
         self.projects_tab.refresh_models()
         self.tasks_tab.refresh_models()
+        self.comparator_tab.refresh_models()
 
     def on_projects_changed(self):
         self.chat_tab.refresh_projects()

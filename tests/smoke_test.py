@@ -551,6 +551,31 @@ w.change_appearance(delta=-2)
 w.change_appearance(toggle=True)
 assert _style.CURRENT_THEME == "sombre"
 print("Thème / police OK")
+
+# ------------------------------------------------------------- Comparateur
+comp = w.comparator_tab
+comp.refresh_models()
+idx_sse = comp.columns[0].combo.findData(SSE_REF)
+assert idx_sse >= 0, "serveur SSE dans le comparateur"
+comp.columns[0].combo.setCurrentIndex(idx_sse)
+comp.columns[1].combo.setCurrentIndex(idx_sse)
+comp.columns[2].combo.setCurrentIndex(0)
+comp.prompt.setPlainText("Bonjour, comparons")
+comp.compare()
+loop = QEventLoop()
+t = QTimer()
+t.setInterval(50)
+t.timeout.connect(lambda: loop.quit() if not (comp.columns[0].busy() or comp.columns[1].busy()) else None)
+t.start()
+QTimer.singleShot(15000, loop.quit)
+loop.exec()
+t.stop()
+app.processEvents()
+assert comp.columns[0].body.toPlainText() == "Hello world", comp.columns[0].body.toPlainText()
+assert comp.columns[1].body.toPlainText() == "Hello world", comp.columns[1].body.toPlainText()
+assert comp.columns[2].status.text() == "—"
+print("Comparateur OK :", comp.columns[0].status.text())
+
 server.shutdown()
 
 w.close()
