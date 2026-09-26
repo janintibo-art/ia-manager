@@ -46,12 +46,28 @@ class ChatWorker(SafeThread):
         self.messages = [dict(m) for m in messages]
         self.system = system
 
+    def stop(self):
+        self.requestInterruption()
+
     def run(self):
-        from src.backend.providers import chat
+        from src.backend.providers import chat_stream
+        from src.backend import local_jobs
+        token = None
         try:
-            text = chat(self.model_ref, self.messages, self.system)
-        except Exception as e:  # jamais d'exception dans un thread
+            if local_jobs.enabled() and local_jobs.is_local(self.model_ref):
+                token = local_jobs.acquire(self.model_ref, self.isInterruptionRequested)
+                if token is None:
+                    self.answered.emit("Erreur : tâche interrompue")
+                    return
+            text, stats = chat_stream(self.model_ref, self.messages, self.system,
+                                      should_stop=self.isInterruptionRequested)
+            if stats.get("stopped"):
+                text = "Erreur : tâche interrompue"
+        except Exception as e:
             text = f"Erreur : {e}"
+        finally:
+            if token:
+                local_jobs.release(token)
         self.answered.emit(text)
 
 
@@ -74,6 +90,7 @@ class FunctionWorker(SafeThread):
 class StreamWorker(SafeThread):
     """Réponse de l'IA au fil de l'eau : token(morceau) puis done(texte complet, statistiques)"""
     token = pyqtSignal(str)
+    phase = pyqtSignal(str)
     done = pyqtSignal(str, dict)
 
     def __init__(self, model_ref: str, messages: List[Dict], system: str = ""):
@@ -88,9 +105,49 @@ class StreamWorker(SafeThread):
 
     def run(self):
         from src.backend.providers import chat_stream
+        from src.backend import local_jobs
+        token = None
         try:
+            if local_jobs.enabled() and local_jobs.is_local(self.model_ref):
+                self.phase.emit("En attente d’un créneau local…")
+                token = local_jobs.acquire(self.model_ref, lambda: self._stop)
+                if token is None:
+                    self.done.emit("", {"stopped": True})
+                    return
+            self.phase.emit("L’IA réfléchit…")
             text, stats = chat_stream(self.model_ref, self.messages, self.system,
                                       self.token.emit, lambda: self._stop)
-        except Exception as e:  # jamais d'exception dans un thread
+        except Exception as e:
             text, stats = f"Erreur : {e}", {}
+        finally:
+            if token:
+                local_jobs.release(token)
         self.done.emit(text, stats)
+
+
+class AttachmentWorker(SafeThread):
+    progress = pyqtSignal(int, int, str)
+    loaded = pyqtSignal(list, list)
+
+    def __init__(self, paths, loader):
+        super().__init__()
+        from threading import Event
+        self.paths, self.loader = list(paths), loader
+        self.cancelled = Event()
+
+    def stop(self):
+        self.cancelled.set()
+
+    def run(self):
+        from pathlib import Path
+        results, errors = [], []
+        for index, path in enumerate(self.paths, 1):
+            if self.cancelled.is_set():
+                break
+            self.progress.emit(index, len(self.paths), Path(path).name)
+            try:
+                results.append(self.loader(path))
+            except Exception as error:
+                errors.append(f"{Path(path).name} : {error}")
+        if not self.cancelled.is_set():
+            self.loaded.emit(results, errors)

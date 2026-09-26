@@ -24,6 +24,7 @@ from src.ui.tabs.projects_tab import ProjectsTab, get_project_manager
 from src.ui.tabs.search_tab import SearchTab
 from src.ui.tabs.setup_tab import SetupTab
 from src.ui.tabs.tasks_tab import TasksTab
+from src.ui.tabs.workspace_tab import WorkspaceTab
 from src.ui.workers import ChatWorker
 
 SCHEDULER_INTERVAL_MS = 30_000
@@ -55,6 +56,10 @@ class MainWindow(QMainWindow):
         self.comparator_tab = ComparatorTab()
         self.bench_tab = BenchTab()
         self.obliteratus_tab = ObliteratusTab()
+        self.workspace_tab = WorkspaceTab()
+        self.workspace_tab.apply_profile.connect(self.apply_work_profile)
+        self.workspace_tab.trials.compare_models.connect(self.compare_trial_models)
+        self.workspace_tab.set_models([self.chat_tab.model_select.itemData(i) for i in range(self.chat_tab.model_select.count())])
 
         self.tabs.addTab(self.setup_tab, "⚙️ Analyse")
         self.tabs.addTab(self.models_tab, "📦 Modèles")
@@ -68,6 +73,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.connections_tab, "🔌 Connexions")
         self.tabs.addTab(self.github_tab, "🐙 GitHub")
         self.tabs.addTab(self.obliteratus_tab, "🧪 Obliteratus")
+        self.tabs.addTab(self.workspace_tab, "📚 Espace de travail")
 
         # Modèles installés ou supprimés : tous les onglets se mettent à jour
         self.setup_tab.models_changed.connect(self.on_models_changed)
@@ -118,6 +124,7 @@ class MainWindow(QMainWindow):
         self.projects_tab.refresh_models()
         self.tasks_tab.refresh_models()
         self.comparator_tab.refresh_models()
+        self.workspace_tab.set_models([self.chat_tab.model_select.itemData(i) for i in range(self.chat_tab.model_select.count())])
 
     def on_tab_changed(self, _index: int):
         # Le test de vitesse lit le matériel et les modèles à la première ouverture de l'onglet
@@ -125,6 +132,7 @@ class MainWindow(QMainWindow):
             self.bench_tab.scan()
 
     def on_projects_changed(self):
+        self.workspace_tab.refresh_projects()
         self.chat_tab.refresh_projects()
         self.chat_tab.show_hint()
         self.github_tab.refresh_projects()
@@ -141,6 +149,39 @@ class MainWindow(QMainWindow):
     def new_conversation(self, pid: str):
         self.chat_tab.new_conversation_in(pid)
         self.tabs.setCurrentWidget(self.chat_tab)
+
+    def compare_trial_models(self, source, result):
+        comp = self.comparator_tab
+        comp.refresh_models()
+        indices = [comp.columns[0].combo.findData(source), comp.columns[1].combo.findData(result)]
+        if not source or not result or min(indices) < 0:
+            self.workspace_tab.trials.status.setText("Les deux références doivent être disponibles dans Connexions ou Ollama.")
+            return
+        if any(column.busy() for column in comp.columns):
+            self.workspace_tab.trials.status.setText("Arrêtez la comparaison en cours avant d’en préparer une autre.")
+            return
+        for column, index in zip(comp.columns, indices):
+            column.combo.setCurrentIndex(index)
+        comp.columns[2].combo.setCurrentIndex(0)
+        self.tabs.setCurrentWidget(comp)
+
+    def apply_work_profile(self, profile):
+        from src.backend import model_options
+        chat = self.chat_tab
+        if (chat.worker is not None and chat.worker.isRunning()) or (chat.web_worker is not None and chat.web_worker.isRunning()):
+            self.workspace_tab.profile_status.setText("Arrêtez la génération ou attendez la recherche avant de changer de profil.")
+            return
+        ref = profile.get("model") or chat.current_ref()
+        if not ref or not chat.select_ref(ref):
+            self.workspace_tab.profile_status.setText("Choisissez un modèle disponible avant d’appliquer ce profil.")
+            return
+        chat.profile_instructions = profile.get("instructions", "")
+        chat.profile_label.setText("Profil : " + profile.get("name", "personnalisé"))
+        chat.web_mode.setChecked(profile.get("web", False))
+        chat.code_mode.setChecked(profile.get("code", False))
+        model_options.set_options(ref, {"mode": profile.get("mode", "balanced"),
+            "num_ctx": profile.get("num_ctx",8192),"temperature":profile.get("temperature",.7),"gpu_layers":-1})
+        self.tabs.setCurrentWidget(chat)
 
     # ------------------------------------------------------------ apparence
     def build_appearance_buttons(self) -> QWidget:
@@ -218,6 +259,17 @@ class MainWindow(QMainWindow):
                 self.tray_hint_shown = True
             return
         self.obliteratus_tab.shutdown()
+        self.chat_tab.cancel_attachments()
+        self.workspace_tab.cancel_import()
+        if self.task_worker is not None:
+            self.task_worker.stop()
+        from src.ui.workers import SafeThread, StreamWorker, ChatWorker
+        for worker in list(SafeThread._alive):
+            if isinstance(worker, (StreamWorker, ChatWorker)):
+                worker.stop()
+        for worker in list(SafeThread._alive):
+            if isinstance(worker, (StreamWorker, ChatWorker)):
+                worker.wait(1000)
         if self.tray:
             self.tray.hide()
         event.accept()

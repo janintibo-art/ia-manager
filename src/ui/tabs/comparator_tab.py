@@ -53,6 +53,7 @@ class CompareColumn(QWidget):
         self.status.setText("⏳ L'IA réfléchit…")
         self.worker = StreamWorker(ref, messages, system)
         self.worker.token.connect(self.buffer.append)
+        self.worker.phase.connect(self.status.setText)
         self.worker.done.connect(self.on_done)
         self.worker.start()
         self.flush_timer.start()

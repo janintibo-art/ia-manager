@@ -19,7 +19,7 @@ from src.backend import code_tools, providers, settings, change_review
 from src.backend import github_tools as gt
 from src.backend import quick_commands as qc
 from src.backend import model_registry as reg
-from src.backend import web_tools
+from src.backend import web_tools, project_memory
 from src.backend.ai_manager import AIManager
 from src.backend.project_manager import now_iso, slugify
 from src.ui import style
@@ -27,7 +27,7 @@ from src.ui.tabs.projects_tab import get_project_manager
 from src.ui.dialogs import ModelSettingsDialog, QuickCommandsDialog
 from src.ui.change_review_dialog import ChangeReviewDialog
 from src.ui.tabs.github_tab import CommandRunner
-from src.ui.workers import FunctionWorker, StreamWorker
+from src.ui.workers import AttachmentWorker, FunctionWorker, StreamWorker
 
 NO_PROJECT = "(aucun projet — discussion libre)"
 MAX_IMAGE_SIDE = 1600
@@ -43,6 +43,20 @@ def qimage_to_png(img: QImage) -> bytes:
     img.save(buf, "PNG")
     buf.close()
     return bytes(data)
+
+
+def load_chat_file(path):
+    att.check_size(path)
+    if Path(path).suffix.lower() in att.IMAGE_EXT:
+        dimensions = QImageReader(path).size()
+        if dimensions.isValid() and dimensions.width() * dimensions.height() > 16_000_000:
+            raise ValueError("image trop grande : 16 millions de pixels maximum")
+        img = QImage(path)
+        if img.isNull():
+            raise ValueError("image illisible")
+        return att.image_attachment(Path(path).name, qimage_to_png(img))
+    return att.load_attachment(path)
+
 
 
 class MessageInput(QTextEdit):
@@ -103,12 +117,17 @@ class ChatTab(QWidget):
         self.conv_id: Optional[str] = None
         self.conv_created: Optional[str] = None
         self.image_counter = 0
+        self.attachment_worker = None
+        self.attachment_gen = 0
+        self.attachment_loading = False
         self.apply_runner = CommandRunner(self)
         self.apply_runner.output.connect(self.on_apply_output)
         self.apply_runner.done.connect(self.on_apply_done)
         self.apply_folder = ""
         self.web_worker: Optional[FunctionWorker] = None
         self.web_ctx = ""
+        self.memory_ctx = ""
+        self.memory_sources = []
         self.web_sources: List[Dict] = []
         self.web_gen = 0
         self.setAcceptDrops(True)
@@ -139,6 +158,10 @@ class ChatTab(QWidget):
         self.web_mode.setChecked(bool(settings.get("web_search")))
         self.web_mode.toggled.connect(lambda on: settings.set("web_search", on))
         head.addWidget(self.web_mode)
+        self.memory_mode = QCheckBox("📚 Documents du projet")
+        self.memory_mode.setChecked(bool(settings.get("project_memory_enabled")))
+        self.memory_mode.toggled.connect(lambda on: settings.set("project_memory_enabled", on))
+        head.addWidget(self.memory_mode)
         self.commands_btn = QPushButton("⚡ Commandes")
         self.commands_btn.setToolTip("Commandes rapides : tapez par exemple /resume suivi de votre texte")
         self.commands_menu = QMenu(self)
@@ -172,6 +195,9 @@ class ChatTab(QWidget):
         selectors.addWidget(settings_btn)
         root.addLayout(selectors)
 
+        self.profile_instructions = ""
+        self.profile_label = QLabel("Profil : aucun")
+        root.addWidget(self.profile_label)
         self.hint = QLabel()
         self.hint.setObjectName("Muted")
         self.hint.setWordWrap(True)
@@ -208,6 +234,10 @@ class ChatTab(QWidget):
         self.attach_layout.setSpacing(6)
         self.attach_bar.setVisible(False)
         root.addWidget(self.attach_bar)
+        self.cancel_attach_btn = QPushButton("Annuler le chargement des documents")
+        self.cancel_attach_btn.setVisible(False)
+        self.cancel_attach_btn.clicked.connect(self.cancel_attachments)
+        root.addWidget(self.cancel_attach_btn)
 
         input_row = QHBoxLayout()
         attach_btn = QPushButton("📎")
@@ -261,28 +291,48 @@ class ChatTab(QWidget):
         self.add_files(files)
 
     def add_files(self, paths: List[str]):
-        errors = []
-        for path in paths:
-            if not path or Path(path).is_dir():
-                continue
-            try:
-                att.check_size(path)
-                if Path(path).suffix.lower() in att.IMAGE_EXT:
-                    dimensions = QImageReader(path).size()
-                    if dimensions.isValid() and dimensions.width() * dimensions.height() > 16_000_000:
-                        raise ValueError("image trop grande : 16 millions de pixels maximum")
-                    img = QImage(path)
-                    if img.isNull():
-                        raise ValueError("image illisible")
-                    a = att.image_attachment(Path(path).name, qimage_to_png(img))
-                else:
-                    a = att.load_attachment(path)
-                self.pending.append(a)
-            except Exception as e:
-                errors.append(f"{Path(path).name} : {e}")
+        paths = [p for p in paths if p and not Path(p).is_dir()]
+        if not paths:
+            return
+        if self.attachment_worker is not None:
+            self.status.setText("Un chargement est en cours. Attendez ou annulez-le avant d'ajouter d'autres fichiers.")
+            return
+        self.attachment_gen += 1
+        generation = self.attachment_gen
+        worker = AttachmentWorker(paths, load_chat_file)
+        self.attachment_worker = worker
+        self.attachment_loading = True
+        worker.finished.connect(lambda: self.attachment_finished(worker))
+        worker.progress.connect(lambda i, n, name: self.attachment_progress(generation, i, n, name))
+        worker.loaded.connect(lambda result, errors: self.attachments_loaded(generation, result, errors))
+        self.cancel_attach_btn.setVisible(True)
+        self.status.setText("Chargement des documents…")
+        worker.start()
+
+    def attachment_progress(self, generation, index, total, name):
+        if generation == self.attachment_gen:
+            self.status.setText(f"Lecture {index}/{total} : {name}")
+
+    def attachments_loaded(self, generation, result, errors):
+        if generation != self.attachment_gen:
+            return
+        self.attachment_loading = False
+        self.cancel_attach_btn.setVisible(False)
+        self.pending.extend(result)
         self.refresh_attach_bar()
-        if errors:
-            self.status.setText("⚠️ " + " · ".join(errors))
+        self.status.setText("⚠️ " + " · ".join(errors) if errors else f"{len(result)} fichier(s) chargé(s).")
+
+    def cancel_attachments(self):
+        self.attachment_gen += 1
+        if self.attachment_worker is not None:
+            self.attachment_worker.stop()
+        self.attachment_loading = False
+        self.cancel_attach_btn.setVisible(False)
+        self.status.setText("Chargement annulé. Aucun fichier du lot n'a été ajouté.")
+
+    def attachment_finished(self, worker):
+        if self.attachment_worker is worker:
+            self.attachment_worker = None
 
     def add_qimage(self, img: QImage):
         self.image_counter += 1
@@ -385,7 +435,9 @@ class ChatTab(QWidget):
         self.show_hint()
 
     def instructions(self) -> str:
-        parts = []
+        parts = [getattr(self, "profile_instructions", "")]
+        if self.memory_ctx:
+            parts.append(self.memory_ctx)
         if self.project_id:
             parts.append(self.pm.get_instructions(self.project_id).strip())
         if self.code_mode.isChecked():
@@ -618,7 +670,12 @@ class ChatTab(QWidget):
 
     # ------------------------------------------------------------ discussions
     def reset_conversation(self):
+        self.cancel_attachments()
+        self.pending = []
+        self.refresh_attach_bar()
         self.web_gen += 1
+        self.memory_ctx = ""
+        self.memory_sources = []
         self.web_ctx = ""
         self.web_sources = []
         if self.worker is not None and self.worker.isRunning():
@@ -626,6 +683,7 @@ class ChatTab(QWidget):
             try:
                 self.worker.done.disconnect()
                 self.worker.token.disconnect()
+                self.worker.phase.disconnect()
             except TypeError:
                 pass
             self.worker.stop()
@@ -729,6 +787,9 @@ class ChatTab(QWidget):
 
     # ------------------------------------------------------------ envoi / réception
     def send_message(self):
+        if self.attachment_loading:
+            self.status.setText("Attendez la fin du chargement ou annulez-le avant d’envoyer.")
+            return
         ref = self.current_ref()
         text = self.message_input.toPlainText().strip()
 
@@ -757,10 +818,27 @@ class ChatTab(QWidget):
         self.message_input.clear()
         self.web_ctx = ""
         self.web_sources = []
-        if self.web_mode.isChecked() and had_text:
+        self.memory_ctx = ""
+        self.memory_sources = []
+        memory_folder = str(self.pm.project_folder(self.project_id)) if self.project_id and self.memory_mode.isChecked() else ""
+        if (self.web_mode.isChecked() and had_text) or memory_folder:
             self.status.setText("🌐 Recherche sur internet…")
             gen = self.web_gen
-            self.web_worker = FunctionWorker(web_tools.research, expanded)
+            use_web = self.web_mode.isChecked() and had_text
+            def gather():
+                result = {"context": "", "sources": []}
+                if use_web:
+                    try:
+                        result.update(web_tools.research(expanded))
+                    except Exception as error:
+                        result["warning"] = str(error)
+                if memory_folder:
+                    try:
+                        result["documents"] = project_memory.search(memory_folder, expanded)
+                    except Exception as error:
+                        result["memory_warning"] = str(error)
+                return result
+            self.web_worker = FunctionWorker(gather)
             self.web_worker.done.connect(lambda ok, res, r=ref, g=gen: self.on_web_research(ok, res, r, g))
             self.web_worker.start()
         else:
@@ -771,6 +849,14 @@ class ChatTab(QWidget):
             return  # la discussion a été réinitialisée entre-temps
         if ok and isinstance(result, dict):
             self.web_ctx = result.get("context", "")
+            self.memory_sources = result.get("documents", [])
+            self.memory_ctx = project_memory.context(self.memory_sources)
+            if result.get("warning"):
+                self.system_message("⚠️ Recherche internet impossible : " + html.escape(result["warning"]))
+            if result.get("memory_warning"):
+                self.system_message("⚠️ Recherche documentaire impossible : " + html.escape(result["memory_warning"]))
+            elif self.memory_mode.isChecked() and self.project_id and not self.memory_sources:
+                self.system_message("📚 Aucun passage pertinent trouvé dans les documents indexés.")
             self.web_sources = result.get("sources", [])
         else:
             self.system_message(f"⚠️ Recherche internet impossible ({html.escape(str(result))}) "
@@ -792,6 +878,7 @@ class ChatTab(QWidget):
         self.web_ctx = ""  # ne sert qu'au message en cours, déjà inclus dans "system"
         self.worker = StreamWorker(ref, self.messages, system)
         self.worker.token.connect(self.stream_buffer.append)
+        self.worker.phase.connect(self.status.setText)
         self.worker.done.connect(self.on_stream_done)
         self.worker.start()
         self.flush_timer.start()
@@ -844,6 +931,10 @@ class ChatTab(QWidget):
             return
         if stats.get("stopped"):
             text = (text + "\n\n*(réponse interrompue)*") if text else "*(réponse interrompue)*"
+        if self.memory_sources:
+            text += "\n\n**Passages transmis à l’IA :**\n" + "\n".join(
+                f"- [D{i}] {r['name']} — passage {r['passage']}" for i, r in enumerate(self.memory_sources, 1))
+            self.memory_sources = []
         self.messages.append({"role": "assistant", "content": text})
         self.render_message(len(self.messages) - 1, ref)
         if self.web_sources:

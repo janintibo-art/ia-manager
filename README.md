@@ -36,3 +36,7 @@ L'[analyse v22](ANALYSE_v22.md) décrit les corrections, les problèmes restants
 ## Mise à jour v23
 
 Le Chat propose un aperçu des différences avant d'appliquer du code, une sauvegarde automatique et un bouton pour restaurer la dernière application. L'envoi GitHub est limité aux fichiers de l'aperçu. Les pièces jointes disposent de limites de lecture avant décompression. Voir [le guide v23](MISE_A_JOUR_v23.md) pour les détails et les limites.
+
+## Mise à jour v24
+
+Stop réseau annulable, documents chargés en arrière-plan et nouvel **Espace de travail** : mémoire documentaire par projet, profils, file des générations locales, déchargement Ollama et carnet manuel des essais Obliteratus. Voir [le guide v24](MISE_A_JOUR_v24.md) pour les étapes et les limites.

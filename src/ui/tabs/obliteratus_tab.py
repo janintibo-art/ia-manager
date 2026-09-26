@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit,
     QPushButton, QSpinBox, QVBoxLayout, QWidget,
 )
-from src.backend import obliteratus as ob, settings
+from src.backend import obliteratus as ob, settings, local_jobs
 
 
 class ObliteratusTab(QWidget):
@@ -16,6 +16,7 @@ class ObliteratusTab(QWidget):
         self.process.readyReadStandardOutput.connect(self.read_output)
         self.process.finished.connect(self.finished)
         self.process.errorOccurred.connect(self.failed)
+        self.resource_token = None
         self.queue = []
         self.mode = ""
         self.cancelled = False
@@ -128,12 +129,21 @@ class ObliteratusTab(QWidget):
             self.status.setText(str(error))
 
     def launch(self):
+        if self.mode:
+            return
+        if local_jobs.enabled():
+            self.resource_token = local_jobs.reserve("Atelier Obliteratus")
+            if self.resource_token is None:
+                self.status.setText("Un travail local est actif ou en attente. Attendez sa fin avant de lancer l’atelier.")
+                return
         try:
             self.active_port = self.port.value()
             settings.set("obliteratus_port", self.active_port)
             self.status.setText("Démarrage local · attendez l'adresse du serveur dans le journal avant d'ouvrir l'interface.")
             self.run_steps([ob.launch_command(self.active_port)], "server")
         except Exception as error:
+            local_jobs.release(self.resource_token)
+            self.resource_token = None
             self.status.setText(str(error))
 
     def read_output(self):
@@ -142,6 +152,9 @@ class ObliteratusTab(QWidget):
         self.log.insertPlainText(text)
 
     def finished(self, code, exit_status):
+        if self.mode == "server":
+            local_jobs.release(self.resource_token)
+            self.resource_token = None
         self.kill_timer.stop()
         self.read_output()
         if not self.cancelled and code == 0 and exit_status == QProcess.ExitStatus.NormalExit and self.queue:
@@ -163,6 +176,8 @@ class ObliteratusTab(QWidget):
 
     def failed(self, error):
         if error == QProcess.ProcessError.FailedToStart:
+            local_jobs.release(self.resource_token)
+            self.resource_token = None
             self.queue.clear()
             self.mode = ""
             self.status.setText("Démarrage impossible : " + self.process.errorString())
@@ -177,6 +192,8 @@ class ObliteratusTab(QWidget):
         self.update_buttons()
 
     def shutdown(self):
+        local_jobs.release(self.resource_token)
+        self.resource_token = None
         self.queue.clear()
         self.cancelled = True
         self.kill_timer.stop()
