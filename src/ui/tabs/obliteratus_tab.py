@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QSpinBox, QVBoxLayout, QWidget,
 )
 from src.backend import obliteratus as ob, settings, local_jobs
+from src.backend import python_detection as pd
 
 
 class ObliteratusTab(QWidget):
@@ -24,6 +25,15 @@ class ObliteratusTab(QWidget):
         self.kill_timer = QTimer(self)
         self.kill_timer.setSingleShot(True)
         self.kill_timer.timeout.connect(self.process.kill)
+        self.detecting = False
+        self.install_after_detection = False
+        self.probe = QProcess(self)
+        self.probe.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
+        self.probe.finished.connect(self.probe_finished)
+        self.probe.errorOccurred.connect(self.probe_failed)
+        self.probe_timer = QTimer(self)
+        self.probe_timer.setSingleShot(True)
+        self.probe_timer.timeout.connect(self.probe.kill)
         root = QVBoxLayout(self)
         intro = QLabel(
             "Obliteratus — atelier de modèles locaux\n"
@@ -40,6 +50,13 @@ class ObliteratusTab(QWidget):
             button.clicked.connect(lambda checked=False, target=url: QDesktopServices.openUrl(QUrl(target)))
             links.addWidget(button)
         root.addLayout(links)
+        title = QLabel("1 · Vérifier Python")
+        title.setStyleSheet("font-size: 18px; font-weight: 600; margin-top: 12px;")
+        root.addWidget(title)
+        help_text = QLabel("Cliquez sur Détecter Python : la commande est intégrée à l’application. "
+                           "Le bon chemin sera renseigné automatiquement, sans ouvrir de terminal.")
+        help_text.setWordWrap(True)
+        root.addWidget(help_text)
         form = QFormLayout()
         self.python = QLineEdit(settings.get("obliteratus_python") or ob.default_python())
         row = QHBoxLayout()
@@ -48,6 +65,15 @@ class ObliteratusTab(QWidget):
         self.browse.clicked.connect(self.choose_python)
         row.addWidget(self.browse)
         form.addRow("Python du PC", row)
+        self.detect = QPushButton("Détecter Python automatiquement")
+        self.detect.clicked.connect(lambda: self.detect_python(False))
+        form.addRow(self.detect)
+        self.python_hint = QLabel("Python non vérifié · utilisez la détection avant l’installation.")
+        self.python_hint.setWordWrap(True)
+        form.addRow(self.python_hint)
+        get_python = QPushButton("Télécharger Python — site officiel")
+        get_python.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.python.org/downloads/windows/")))
+        form.addRow(get_python)
         self.port = QSpinBox()
         self.port.setRange(1024, 65535)
         try:
@@ -64,6 +90,9 @@ class ObliteratusTab(QWidget):
             "l'export et sa conversion éventuelle restent à effectuer dans les outils adaptés.")
         note.setWordWrap(True)
         root.addWidget(note)
+        title = QLabel("2 · Installer, puis lancer l’atelier")
+        title.setStyleSheet("font-size: 18px; font-weight: 600; margin-top: 12px;")
+        root.addWidget(title)
         actions = QHBoxLayout()
         self.install = QPushButton("Installer / réparer")
         self.install.clicked.connect(self.install_local)
@@ -82,6 +111,7 @@ class ObliteratusTab(QWidget):
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
         self.log.setMaximumBlockCount(2000)
+        root.addWidget(QLabel("3 · Journal et diagnostic"))
         root.addWidget(self.log)
         self.update_buttons()
 
@@ -91,8 +121,8 @@ class ObliteratusTab(QWidget):
             self.python.setText(path)
 
     def update_buttons(self):
-        busy = bool(self.mode)
-        for widget in (self.install, self.python, self.browse, self.port):
+        busy = bool(self.mode) or self.detecting
+        for widget in (self.install, self.python, self.browse, self.port, self.detect):
             widget.setEnabled(not busy)
         self.start.setEnabled(not busy and ob.environment_python().is_file())
         self.stop.setEnabled(busy)
@@ -119,7 +149,64 @@ class ObliteratusTab(QWidget):
         self.process.setProcessEnvironment(env)
         self.process.start(program, args)
 
+    def detect_python(self, install_after=False):
+        if self.mode or self.detecting:
+            return
+        self.detecting = True
+        self.install_after_detection = install_after
+        self.probe_candidates = list(pd.candidates(self.python.text()))
+        self.python_hint.setText("Recherche d’un Python compatible en cours…")
+        self.status.setText("Vérification automatique · aucune commande à saisir.")
+        self.update_buttons()
+        self.next_probe()
+
+    def next_probe(self):
+        if not self.detecting:
+            return
+        if not self.probe_candidates:
+            self.detecting = False
+            self.install_after_detection = False
+            self.python_hint.setText("Aucun Python 3.10+ utilisable détecté.")
+            self.status.setText("Cliquez sur Télécharger Python, terminez son installation, puis relancez Détecter Python. "
+                                "Si Python est installé dans un dossier personnalisé, utilisez Choisir Python.")
+            self.update_buttons()
+            return
+        program, args = self.probe_candidates.pop(0)
+        if self.probe.isOpen():
+            self.probe.readAllStandardOutput()
+        self.probe.start(program, args + ["-c", pd.PROBE])
+        self.probe_timer.start(5000)
+
+    def probe_failed(self, error):
+        if error == QProcess.ProcessError.FailedToStart and self.detecting:
+            self.probe_timer.stop()
+            QTimer.singleShot(0, self.next_probe)
+
+    def probe_finished(self, code, exit_status):
+        self.probe_timer.stop()
+        if not self.detecting:
+            return
+        try:
+            if code != 0 or exit_status != QProcess.ExitStatus.NormalExit:
+                raise ValueError("Python indisponible")
+            path, version = pd.parse_probe(bytes(self.probe.readAllStandardOutput()).decode("utf-8", errors="replace"))
+        except (ValueError, KeyError, IndexError, TypeError, OSError):
+            QTimer.singleShot(0, self.next_probe)
+            return
+        self.detecting = False
+        self.python.setText(path)
+        settings.set("obliteratus_python", path)
+        self.python_hint.setText("Python " + version + " vérifié · prêt à installer Obliteratus.")
+        self.status.setText("Python détecté. Cliquez sur Installer / réparer, puis Lancer en local.")
+        self.update_buttons()
+        if self.install_after_detection:
+            self.install_after_detection = False
+            self.install_verified()
+
     def install_local(self):
+        self.detect_python(True)
+
+    def install_verified(self):
         try:
             steps = ob.install_steps(self.python.text().strip())
             settings.set("obliteratus_python", self.python.text().strip())
@@ -184,6 +271,16 @@ class ObliteratusTab(QWidget):
             self.update_buttons()
 
     def stop_process(self):
+        if self.detecting:
+            self.detecting = False
+            self.install_after_detection = False
+            self.probe_timer.stop()
+            self.probe.kill()
+            self.probe.waitForFinished(1000)
+            self.python_hint.setText("Détection interrompue.")
+            self.status.setText("Détection arrêtée. Vous pouvez la relancer.")
+            self.update_buttons()
+            return
         self.cancelled = True
         self.queue.clear()
         self.process.terminate()
@@ -192,6 +289,10 @@ class ObliteratusTab(QWidget):
         self.update_buttons()
 
     def shutdown(self):
+        self.detecting = False
+        self.probe_timer.stop()
+        self.probe.kill()
+        self.probe.waitForFinished(1000)
         local_jobs.release(self.resource_token)
         self.resource_token = None
         self.queue.clear()
