@@ -25,6 +25,7 @@ from src.ui.tabs.search_tab import SearchTab
 from src.ui.tabs.setup_tab import SetupTab
 from src.ui.tabs.tasks_tab import TasksTab
 from src.ui.tabs.workspace_tab import WorkspaceTab
+from src.ui.tabs.tutorial_tab import TutorialTab
 from src.ui.workers import ChatWorker
 
 SCHEDULER_INTERVAL_MS = 30_000
@@ -57,6 +58,7 @@ class MainWindow(QMainWindow):
         self.bench_tab = BenchTab()
         self.obliteratus_tab = ObliteratusTab()
         self.workspace_tab = WorkspaceTab()
+        self.tutorial_tab = TutorialTab()
         self.workspace_tab.apply_profile.connect(self.apply_work_profile)
         self.workspace_tab.trials.compare_models.connect(self.compare_trial_models)
         self.workspace_tab.set_models([self.chat_tab.model_select.itemData(i) for i in range(self.chat_tab.model_select.count())])
@@ -74,6 +76,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.github_tab, "🐙 GitHub")
         self.tabs.addTab(self.obliteratus_tab, "🧪 Obliteratus")
         self.tabs.addTab(self.workspace_tab, "📚 Espace de travail")
+        self.tabs.addTab(self.tutorial_tab, "📘 Tuto")
 
         # Modèles installés ou supprimés : tous les onglets se mettent à jour
         self.setup_tab.models_changed.connect(self.on_models_changed)

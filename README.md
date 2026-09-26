@@ -132,3 +132,7 @@ La recherche ModelScope accepte un jeton facultatif pour les dépôts privés et
 ## Mise à jour v49
 
 Les favoris peuvent être effacés en une seule action après confirmation, sans toucher aux fichiers téléchargés ni aux modèles installés. Voir [le guide v49](MISE_A_JOUR_v49.md).
+
+## Mise à jour v50
+
+Un onglet **📘 Tuto** explique le fonctionnement complet d'IA Manager, les sources de modèles, les profils IA, la mémoire, la confidentialité et le dépannage. Il inclut une recherche de conseils et fonctionne sans Internet. Voir [le guide v50](MISE_A_JOUR_v50.md).
