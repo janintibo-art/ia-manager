@@ -78,3 +78,20 @@ def context(results):
             "Appuie tes réponses sur les extraits pertinents et cite [D1], [D2], etc. "
             "Ne prétends pas avoir lu les parties absentes.\n\n" + "\n\n".join(
                 f"[D{i}] {r['name']} — passage {r['passage']}\n{r['text']}" for i,r in enumerate(results,1)))
+
+
+def search_all(root, query, limit=50):
+    """Recherche dans les index documentaires de tous les projets."""
+    root = Path(root)
+    results = []
+    if not root.exists():
+        return results
+    for project in sorted(root.iterdir()):
+        db = project / "memoire.sqlite3"
+        if not db.exists():
+            continue
+        for row in search(project, query, limit):
+            row["project"] = project.name
+            results.append(row)
+    results.sort(key=lambda row: (-row["score"], row["project"], row["name"], row["passage"]))
+    return results[:limit]

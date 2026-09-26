@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
 
 from src.backend import settings
 from src.backend.ai_manager import AIManager
+from src.backend import project_memory
 from src.backend.project_manager import (
     INSTRUCTION_TEMPLATES, ProjectManager, filter_projects, search_conversations, sort_projects,
 )
@@ -81,7 +82,7 @@ class ProjectsTab(QWidget):
 
         gs_row = QHBoxLayout()
         self.global_search = QLineEdit()
-        self.global_search.setPlaceholderText("🔎 Rechercher un mot dans TOUTES les discussions de tous les projets…")
+        self.global_search.setPlaceholderText("🔎 Rechercher dans discussions et documents de tous les projets…")
         self.global_search.setClearButtonEnabled(True)
         self.global_search.returnPressed.connect(self.run_global_search)
         self.global_search.textChanged.connect(lambda t: self.run_global_search() if not t.strip() else None)
@@ -609,19 +610,29 @@ class ProjectsTab(QWidget):
             self.global_results.setVisible(False)
             return
         results = search_conversations(str(self.pm.root), query)
+        for row in project_memory.search_all(str(self.pm.root), query):
+            results.append({"project": row["project"], "project_name": row["project"],
+                            "id": "", "title": "📚 " + row["name"],
+                            "snippet": row["text"], "hits": row["score"],
+                            "updated": "", "document": True})
+        results.sort(key=lambda r: (r["hits"], r.get("updated", "")), reverse=True)
         if not results:
             self.global_results.addItem(f"Aucune discussion ne contient « {query} ».")
         for r in results:
             date = r["updated"].replace("T", " ")[:16]
-            item = QListWidgetItem(f"💬 {r['title']}   ·   📁 {r['project_name']}   ·   {date}   ·   "
+            icon = "📚" if r.get("document") else "💬"
+            item = QListWidgetItem(f"{icon} {r['title']}   ·   📁 {r['project_name']}   ·   {date}   ·   "
                                    f"{r['hits']} occurrence(s)\n      {r['snippet'][:160]}")
-            item.setData(Qt.ItemDataRole.UserRole, (r["project"], r["id"]))
-            item.setToolTip("Double-clic pour rouvrir cette discussion dans le Chat")
+            item.setData(Qt.ItemDataRole.UserRole, (r["project"], r["id"], bool(r.get("document"))))
+            item.setToolTip("Document indexé" if r.get("document") else "Double-clic pour rouvrir cette discussion dans le Chat")
             self.global_results.addItem(item)
         self.global_results.setVisible(True)
 
     def open_global_result(self, item):
         data = item.data(Qt.ItemDataRole.UserRole)
         if data:
-            pid, cid = data
+            pid, cid, is_document = (*data, False) if len(data) == 2 else data
+            if is_document:
+                self.status.setText("Ouvrez l’Espace de travail pour consulter et interroger ce document.")
+                return
             self.open_conversation.emit(pid, cid)

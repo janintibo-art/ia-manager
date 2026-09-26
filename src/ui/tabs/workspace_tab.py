@@ -30,8 +30,18 @@ class WorkspaceTab(QWidget):
         self.project = QComboBox()
         self.project.currentIndexChanged.connect(self.refresh_docs)
         lay.addWidget(self.project)
+        self.doc_search = QLineEdit()
+        self.doc_search.setPlaceholderText("Rechercher dans les documents de ce projet…")
+        self.doc_search.textChanged.connect(self.search_docs)
+        lay.addWidget(self.doc_search)
         self.docs = QListWidget()
+        self.docs.currentItemChanged.connect(self.preview_doc)
         lay.addWidget(self.docs)
+        self.doc_preview = QPlainTextEdit()
+        self.doc_preview.setReadOnly(True)
+        self.doc_preview.setPlaceholderText("Sélectionnez un document pour afficher un extrait.")
+        self.doc_preview.setMaximumBlockCount(500)
+        lay.addWidget(self.doc_preview)
         row = QHBoxLayout()
         self.import_btn = QPushButton("Ajouter des documents…")
         self.import_btn.clicked.connect(self.import_docs)
@@ -110,8 +120,28 @@ class WorkspaceTab(QWidget):
         self.project.blockSignals(False)
         self.refresh_docs()
 
+    def search_docs(self):
+        query = self.doc_search.text().strip()
+        if not query:
+            self.refresh_docs()
+            return
+        self.docs.clear()
+        folder = self.folder()
+        if folder is None:
+            return
+        for row in project_memory.search(folder, query, 50):
+            item = QListWidgetItem(f"{row['name']} · passage {row['passage']} · pertinence {row['score']}")
+            item.setData(Qt.ItemDataRole.UserRole, row)
+            self.docs.addItem(item)
+        self.doc_status.setText(f"{self.docs.count()} passage(s) trouvé(s).")
+
+    def preview_doc(self, current, _previous=None):
+        row = current.data(Qt.ItemDataRole.UserRole) if current else None
+        self.doc_preview.setPlainText(row.get("text", "") if isinstance(row, dict) else "")
+
     def refresh_docs(self):
         self.docs.clear()
+        self.doc_preview.clear()
         folder=self.folder()
         if folder is None: return
         try:
