@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
 )
 
 from src.backend import providers as pv
+from src.backend import settings
 from src.backend.ai_manager import AIManager
 from src.ui import style
 from src.ui.workers import DownloadWorker, FunctionWorker
@@ -283,7 +284,45 @@ class ConnectionsTab(QWidget):
         self.add_status.setWordWrap(True)
         lay.addWidget(self.add_status)
         root.addWidget(box)
+
+        # --- Recherche internet
+        box, lay = card(
+            "🌐  Recherche internet",
+            "L'interrupteur « 🌐 Internet » du Chat fonctionne sans rien régler ici (DuckDuckGo, "
+            "avec Wikipédia en secours). Une clé <b>Brave Search</b> (gratuite) ou une adresse "
+            "<b>SearXNG</b> donnent des résultats plus fiables, en priorité si renseignées.")
+        web_form = QFormLayout()
+        web_form.setVerticalSpacing(8)
+        self.brave_key = QLineEdit(settings.get("brave_key") or "")
+        self.brave_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.brave_key.setPlaceholderText("Collez ici votre clé API Brave Search (facultatif)")
+        web_form.addRow("Clé Brave Search :", self.brave_key)
+        self.searxng_url = QLineEdit(settings.get("searxng_url") or "")
+        self.searxng_url.setPlaceholderText("http://mon-serveur:8080 (facultatif)")
+        web_form.addRow("Adresse SearXNG :", self.searxng_url)
+        lay.addLayout(web_form)
+        web_row = QHBoxLayout()
+        brave_key_btn = QPushButton("🔑 Obtenir une clé Brave")
+        brave_key_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://brave.com/search/api/")))
+        web_row.addWidget(brave_key_btn)
+        web_save = QPushButton("💾 Enregistrer")
+        web_save.setObjectName("Primary")
+        web_save.clicked.connect(self.save_web_settings)
+        web_row.addWidget(web_save)
+        web_row.addStretch()
+        lay.addLayout(web_row)
+        self.web_status = QLabel()
+        self.web_status.setObjectName("Muted")
+        self.web_status.setWordWrap(True)
+        lay.addWidget(self.web_status)
+        root.addWidget(box)
+
         root.addStretch()
+
+    def save_web_settings(self):
+        settings.set("brave_key", self.brave_key.text().strip())
+        settings.set("searxng_url", self.searxng_url.text().strip())
+        self.web_status.setText("✅ Enregistré.")
 
     # ------------------------------------------------------ serveurs compatibles
     def custom_providers(self) -> List[Dict]:

@@ -766,6 +766,71 @@ assert comp.columns[1].body.toPlainText() == "Hello world", comp.columns[1].body
 assert comp.columns[2].status.text() == "—"
 print("Comparateur OK :", comp.columns[0].status.text())
 
+# ------------------------------------------------------------- Recherche internet
+from src.backend import web_tools  # noqa: E402
+from src.ui.tabs import chat_tab as chat_tab_mod  # noqa: E402
+
+ddg_html_fixture = (
+    '<a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexemple.test%2Fa">Titre A</a>'
+    '<a class="result__snippet" href="...">Un extrait.</a>'
+)
+ddg_results = web_tools.parse_ddg_html(ddg_html_fixture)
+assert ddg_results == [{"title": "Titre A", "url": "https://exemple.test/a", "snippet": "Un extrait."}], ddg_results
+lite_fixture = (
+    '<a href="https://exemple.test/b" class="result-link">Titre B</a>'
+    '<td class="result-snippet">Extrait B.</td>'
+)
+lite_results = web_tools.parse_ddg_lite(lite_fixture)
+assert lite_results and lite_results[0]["url"] == "https://exemple.test/b", lite_results
+title, text = web_tools.html_to_text(
+    "<html><head><title>T</title></head><body><nav>menu</nav><p>Texte utile.</p>"
+    "<script>evil()</script></body></html>")
+assert title == "T" and "Texte utile." in text and "menu" not in text and "evil" not in text
+print("Analyse DuckDuckGo / pages OK")
+
+chat.select_ref(SSE_REF)
+chat.clear_chat()
+assert not chat.web_mode.isChecked()
+chat.web_mode.setChecked(True)
+assert settings.get("web_search") is True
+
+CANNED_WEB = {"context": "Contexte marqueur MARQUEUR_WEB_TEST trouvé sur internet.",
+             "sources": [{"title": "Source Un", "url": "https://exemple.test/source1"}],
+             "engine": "Test"}
+chat_tab_mod.web_tools.research = lambda q, n_results=5, n_pages=2: CANNED_WEB
+chat.message_input.setPlainText("quelle actualité aujourd'hui")
+chat.send_message()
+assert "Recherche sur internet" in chat.status.text(), chat.status.text()
+wait_idle()
+assert "MARQUEUR_WEB_TEST" in _json.dumps(SSE_RECEIVED["last"]), SSE_RECEIVED["last"]
+assert chat.messages[-1]["content"] == "Hello world", chat.messages[-1]
+assert "exemple.test/source1" in chat.chat_display.toHtml()
+assert not chat.web_sources, "sources vidées après affichage"
+print("Recherche internet (toggle) OK")
+
+chat_tab_mod.web_tools.research = lambda q, n_results=5, n_pages=2: (_ for _ in ()).throw(RuntimeError("hors ligne"))
+chat.message_input.setPlainText("autre question")
+chat.send_message()
+wait_idle()
+assert "Recherche internet impossible" in chat.chat_display.toPlainText()
+assert chat.messages[-1]["content"] == "Hello world", "la réponse continue sans internet"
+print("Recherche internet (échec réseau) OK")
+
+chat.web_mode.setChecked(False)
+assert settings.get("web_search") is False
+chat_tab_mod.web_tools.research = web_tools.research
+
+conn = w.connections_tab
+assert hasattr(conn, "brave_key") and hasattr(conn, "searxng_url")
+conn.brave_key.setText("cle-test-brave")
+conn.searxng_url.setText("http://mon-searxng:8080")
+conn.save_web_settings()
+assert settings.get("brave_key") == "cle-test-brave"
+assert settings.get("searxng_url") == "http://mon-searxng:8080"
+settings.set("brave_key", "")
+settings.set("searxng_url", "")
+print("Réglages recherche internet OK")
+
 server.shutdown()
 
 w.close()

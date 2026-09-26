@@ -19,13 +19,14 @@ from src.backend import code_tools, providers, settings
 from src.backend import github_tools as gt
 from src.backend import quick_commands as qc
 from src.backend import model_registry as reg
+from src.backend import web_tools
 from src.backend.ai_manager import AIManager
 from src.backend.project_manager import now_iso, slugify
 from src.ui import style
 from src.ui.tabs.projects_tab import get_project_manager
 from src.ui.dialogs import ModelSettingsDialog, QuickCommandsDialog
 from src.ui.tabs.github_tab import CommandRunner
-from src.ui.workers import StreamWorker
+from src.ui.workers import FunctionWorker, StreamWorker
 
 NO_PROJECT = "(aucun projet — discussion libre)"
 MAX_IMAGE_SIDE = 1600
@@ -105,6 +106,10 @@ class ChatTab(QWidget):
         self.apply_runner.output.connect(self.on_apply_output)
         self.apply_runner.done.connect(self.on_apply_done)
         self.apply_folder = ""
+        self.web_worker: Optional[FunctionWorker] = None
+        self.web_ctx = ""
+        self.web_sources: List[Dict] = []
+        self.web_gen = 0
         self.setAcceptDrops(True)
         self.init_ui()
         self.refresh_models()
@@ -127,6 +132,12 @@ class ChatTab(QWidget):
         self.code_mode.setChecked(bool(settings.get("code_mode")))
         self.code_mode.toggled.connect(lambda on: (settings.set("code_mode", on), self.show_hint()))
         head.addWidget(self.code_mode)
+        self.web_mode = QCheckBox("🌐 Internet")
+        self.web_mode.setToolTip("Avant d'envoyer, cherche sur internet et donne les résultats "
+                                 "(avec les sources) à l'IA — utile pour l'actualité ou un sujet récent.")
+        self.web_mode.setChecked(bool(settings.get("web_search")))
+        self.web_mode.toggled.connect(lambda on: settings.set("web_search", on))
+        head.addWidget(self.web_mode)
         self.commands_btn = QPushButton("⚡ Commandes")
         self.commands_btn.setToolTip("Commandes rapides : tapez par exemple /resume suivi de votre texte")
         self.commands_menu = QMenu(self)
@@ -369,6 +380,9 @@ class ChatTab(QWidget):
             parts.append(self.pm.get_instructions(self.project_id).strip())
         if self.code_mode.isChecked():
             parts.append(code_tools.CODE_MODE_INSTRUCTIONS)
+        if self.web_ctx:
+            parts.append("Tu as accès à ces informations trouvées à l'instant sur internet — "
+                         "utilise-les si elles sont utiles, ignore-les sinon :\n\n" + self.web_ctx)
         return "\n\n".join(p for p in parts if p)
 
     def show_hint(self):
@@ -551,6 +565,9 @@ class ChatTab(QWidget):
 
     # ------------------------------------------------------------ discussions
     def reset_conversation(self):
+        self.web_gen += 1
+        self.web_ctx = ""
+        self.web_sources = []
         if self.worker is not None and self.worker.isRunning():
             # Une réponse arrivait encore : on l'abandonne pour ne pas polluer la nouvelle discussion
             try:
@@ -670,6 +687,9 @@ class ChatTab(QWidget):
             return
         if self.worker is not None and self.worker.isRunning():
             return
+        if self.web_worker is not None and self.web_worker.isRunning():
+            return
+        had_text = bool(text)
         if not text:
             text = "Voici les fichiers joints."
 
@@ -682,6 +702,26 @@ class ChatTab(QWidget):
         self.pending = []
         self.refresh_attach_bar()
         self.message_input.clear()
+        self.web_ctx = ""
+        self.web_sources = []
+        if self.web_mode.isChecked() and had_text:
+            self.status.setText("🌐 Recherche sur internet…")
+            gen = self.web_gen
+            self.web_worker = FunctionWorker(web_tools.research, expanded)
+            self.web_worker.done.connect(lambda ok, res, r=ref, g=gen: self.on_web_research(ok, res, r, g))
+            self.web_worker.start()
+        else:
+            self.start_stream(ref)
+
+    def on_web_research(self, ok: bool, result, ref: str, gen: int):
+        if gen != self.web_gen:
+            return  # la discussion a été réinitialisée entre-temps
+        if ok and isinstance(result, dict):
+            self.web_ctx = result.get("context", "")
+            self.web_sources = result.get("sources", [])
+        else:
+            self.system_message(f"⚠️ Recherche internet impossible ({html.escape(str(result))}) "
+                                "— réponse sans internet.")
         self.start_stream(ref)
 
     def start_stream(self, ref: str):
@@ -695,7 +735,9 @@ class ChatTab(QWidget):
         self.stream_pos = doc.characterCount() - 1
         self.append_html(f"<p style='margin-top:10px'><span style='color:{style.GREEN}; font-weight:600'>"
                          f"IA · {html.escape(who)}</span></p><p></p>")
-        self.worker = StreamWorker(ref, self.messages, self.instructions())
+        system = self.instructions()
+        self.web_ctx = ""  # ne sert qu'au message en cours, déjà inclus dans "system"
+        self.worker = StreamWorker(ref, self.messages, system)
         self.worker.token.connect(self.stream_buffer.append)
         self.worker.done.connect(self.on_stream_done)
         self.worker.start()
@@ -745,11 +787,17 @@ class ChatTab(QWidget):
             if self.messages and self.messages[-1]["role"] == "user":
                 self.messages.pop()
             self.system_message(f"❌ {html.escape(text or 'Réponse vide.')}")
+            self.web_sources = []
             return
         if stats.get("stopped"):
             text = (text + "\n\n*(réponse interrompue)*") if text else "*(réponse interrompue)*"
         self.messages.append({"role": "assistant", "content": text})
         self.render_message(len(self.messages) - 1, ref)
+        if self.web_sources:
+            links = " · ".join(f"<a href='{html.escape(s['url'])}'>{html.escape(s['title'] or s['url'])}</a>"
+                               for s in self.web_sources[:5])
+            self.system_message(f"🌐 Sources : {links}")
+            self.web_sources = []
         self.status.setText(self.stats_text(stats))
         try:
             self.save_current(ref)

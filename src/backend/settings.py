@@ -14,6 +14,9 @@ DEFAULTS: Dict[str, Any] = {
     "github_folder": "",
     "theme": "sombre",
     "font_size": 13,
+    "web_search": False,
+    "brave_key": "",
+    "searxng_url": "",
 }
 
 
