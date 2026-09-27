@@ -68,7 +68,7 @@ class CommandRunner(QObject):
             args = [a.replace("{capture}", self.captured) for a in args]
 
         program = step["program"]
-        resolved = shutil.which(program) or program
+        resolved = (gt.tool_status()["gh"] if program == "gh" else shutil.which(program)) or program
         self._capture = bool(step.get("capture"))
         self._buffer = ""
 
@@ -187,7 +187,7 @@ class GithubTab(QWidget):
             lambda: QDesktopServices.openUrl(QUrl("https://git-scm.com/download/win")))
         tl.addWidget(self.install_git_btn)
         self.install_gh_btn = QPushButton("Installer GitHub CLI")
-        self.install_gh_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://cli.github.com")))
+        self.install_gh_btn.clicked.connect(self.install_gh)
         tl.addWidget(self.install_gh_btn)
         login_btn = QPushButton("🔑 Se connecter")
         login_btn.setToolTip("Ouvre une fenêtre de commande pour « gh auth login » (une seule fois)")
@@ -385,14 +385,39 @@ class GithubTab(QWidget):
         self.tools_label.setText(
             f"Git {ok if st['git'] else ko}   ·   GitHub CLI (gh) {ok if st['gh'] else ko}"
             + ("" if st["git"] and st["gh"] else
-               "   —   installez les outils manquants, puis relancez IA Manager.")
+               "   —   installez les outils manquants, puis revérifiez leur état.")
         )
         self.install_git_btn.setVisible(not st["git"])
         self.install_gh_btn.setVisible(not st["gh"])
 
     def check_login(self):
         self.refresh_tools()
-        self.runner.run(gt.pc_steps("auth_status"))
+        if gt.tool_status()["gh"]:
+            self.runner.run(gt.pc_steps("auth_status"))
+        else:
+            self.append_output("\nGitHub CLI est absent. Cliquez sur Installer GitHub CLI.\n")
+
+    def install_gh(self):
+        if not gt.is_windows():
+            QDesktopServices.openUrl(QUrl("https://cli.github.com/manual/installation"))
+            return
+        if not shutil.which("winget"):
+            self.append_output("\nWinGet est introuvable sur ce PC. Ouverture de la page officielle de GitHub CLI.\n")
+            QDesktopServices.openUrl(QUrl("https://cli.github.com/manual/installation"))
+            return
+        if self.runner.busy():
+            self.append_output("\nAttendez la fin de la commande en cours.\n")
+            return
+        answer = QMessageBox.question(
+            self, "Installer GitHub CLI",
+            "Installer GitHub CLI avec le gestionnaire Windows WinGet ? "
+            "Le suivi de l'installation s'affichera dans le journal ci-dessous.",
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        self._installing_gh = True
+        self.append_output("\nInstallation de GitHub CLI en cours...\n")
+        self.runner.run([{"program": "winget", "args": ["install", "--id", "GitHub.cli", "--exact", "--source", "winget"]}])
 
     def login(self):
         if not gt.tool_status()["gh"]:
@@ -400,8 +425,8 @@ class GithubTab(QWidget):
                                     "Installez d'abord GitHub CLI (bouton « Installer GitHub CLI »).")
             return
         if gt.is_windows():
-            QProcess.startDetached("cmd", ["/c", "start", "cmd", "/k",
-                                           "gh auth login && gh auth setup-git"])
+            gh = gt.tool_status()["gh"]
+            QProcess.startDetached("cmd", ["/k", f'"{gh}" auth login && "{gh}" auth setup-git'])
             self.append_output("\n🔑 Une fenêtre s'est ouverte : suivez les instructions pour vous "
                                "connecter, puis cliquez sur 🔄.\n")
         else:
@@ -424,6 +449,16 @@ class GithubTab(QWidget):
         self.console.moveCursor(QTextCursor.MoveOperation.End)
 
     def on_done(self, code: int):
+        if getattr(self, "_installing_gh", False):
+            self._installing_gh = False
+            self.refresh_tools()
+            if code == 0 and gt.tool_status()["gh"]:
+                self.append_output("\n✅ GitHub CLI est installé. Cliquez sur Se connecter.\n")
+            elif code == 0:
+                self.append_output("\nInstallation terminée. Redémarrez IA Manager si gh n'est pas encore détecté.\n")
+            else:
+                self.append_output("\nInstallation interrompue ou en erreur. Vérifiez le message ci-dessus, puis réessayez.\n")
+            return
         if code == 0:
             self.append_output("\n✅ Terminé.\n")
 

@@ -4,8 +4,10 @@ Convention : dossier local avec tiret bas (mon_projet), dépôt GitHub avec tire
 """
 
 import platform
+import os
 import re
 import shutil
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 
@@ -109,7 +111,17 @@ def termux_commands(action: str, local: str, owner: str, message: str = "",
 # ------------------------------------------------------------------ PC
 def tool_status() -> Dict[str, Optional[str]]:
     """Chemin de git et gh s'ils sont installés"""
-    return {"git": shutil.which("git"), "gh": shutil.which("gh")}
+    gh = shutil.which("gh")
+    if not gh and is_windows():
+        # WinGet peut installer gh pendant que l'application tourne : son PATH
+        # conserve alors l'ancienne valeur jusqu'au prochain démarrage.
+        for root in (os.environ.get("ProgramFiles"), os.environ.get("ProgramFiles(x86)")):
+            if root:
+                candidate = Path(root) / "GitHub CLI" / "gh.exe"
+                if candidate.is_file():
+                    gh = str(candidate)
+                    break
+    return {"git": shutil.which("git"), "gh": gh}
 
 
 def is_windows() -> bool:
