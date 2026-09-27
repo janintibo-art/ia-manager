@@ -6,6 +6,33 @@ import shutil
 import time
 from pathlib import Path
 
+def model_library(root=None, export_root=None):
+    """Checkpoints complets et conversions locales associées, sans charger les poids."""
+    export_root = Path(export_root) if export_root else Path.home() / 'ia-conversion/exports'
+    conversions = {}
+    for manifest in export_root.glob('*/source.json'):
+        try:
+            info = json.loads(manifest.read_text(encoding='utf-8'))
+            gguf = manifest.parent / 'model.gguf'
+            if gguf.is_file() and gguf.stat().st_size > 0:
+                conversions.setdefault(str(Path(info['checkpoint']).resolve()), []).append(
+                    {'name': info['name'], 'path': str(gguf), 'size': gguf.stat().st_size})
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+    result = []
+    for path in checkpoints(root):
+        try:
+            weight_files = list(path.glob('*.safetensors'))
+            size = sum(f.stat().st_size for f in weight_files)
+            config = json.loads((path / 'config.json').read_text(encoding='utf-8'))
+            family = config.get('model_type') or config.get('architectures', ['Modèle'])[0]
+            result.append({'path': str(path), 'run': path.parent.name,
+                           'family': str(family), 'size': size,
+                           'exports': conversions.get(str(path.resolve()), [])})
+        except (OSError, ValueError, KeyError, TypeError, IndexError):
+            continue
+    return result
+
 PREPARE = r'''
 import pathlib, sys, urllib.request, zipfile, tempfile, shutil
 root = pathlib.Path(sys.argv[1])
@@ -72,6 +99,8 @@ def make_steps(checkpoint, name, python, root=None, ollama=None):
     gguf = output / 'model.gguf'
     modelfile = output / 'Modelfile'
     modelfile.write_text('FROM ./model.gguf\n', encoding='utf-8')
+    (output / 'source.json').write_text(
+        json.dumps({'checkpoint': str(checkpoint), 'name': name}, ensure_ascii=False), encoding='utf-8')
     steps = [(str(python), ['-u', '-c', PREPARE, str(root)])]
     if not converter_python.is_file():
         steps.append((str(python), ['-m', 'venv', str(venv)]))

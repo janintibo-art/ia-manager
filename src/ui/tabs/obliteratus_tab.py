@@ -1,10 +1,11 @@
 """Installation isolée et lancement de l'interface officielle Obliteratus."""
 from pathlib import Path
-from PyQt6.QtCore import QProcess, QProcessEnvironment, QTimer, QUrl
+from PyQt6.QtCore import QProcess, QProcessEnvironment, QTimer, QUrl, Qt
 from PyQt6.QtGui import QDesktopServices, QTextCursor
 from PyQt6.QtWidgets import (
     QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit,
     QPushButton, QSpinBox, QVBoxLayout, QWidget, QComboBox, QGroupBox, QMessageBox,
+    QTableWidget, QTableWidgetItem, QAbstractItemView,
 )
 from src.backend import obliteratus as ob, settings, local_jobs
 from src.backend import python_detection as pd
@@ -110,7 +111,30 @@ class ObliteratusTab(QWidget):
         self.status = QLabel("Version locale indépendante · installation nécessaire avant le premier lancement.")
         self.status.setWordWrap(True)
         root.addWidget(self.status)
-        export_group = QGroupBox("3 · Ajouter un modèle Obliteratus à mes IA")
+        library_group = QGroupBox("3 · Mes modèles créés avec Obliteratus")
+        library_layout = QVBoxLayout(library_group)
+        library_hint = QLabel("Retrouvez vos sauvegardes et conversions GGUF. Sélectionnez un modèle pour préparer son ajout à Ollama.")
+        library_hint.setWordWrap(True)
+        library_layout.addWidget(library_hint)
+        self.library_table = QTableWidget(0, 4)
+        self.library_table.setHorizontalHeaderLabels(["Traitement", "Famille", "Poids", "GGUF disponible"])
+        self.library_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.library_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.library_table.verticalHeader().hide()
+        self.library_table.horizontalHeader().setStretchLastSection(True)
+        self.library_table.setMinimumHeight(150)
+        self.library_table.itemSelectionChanged.connect(self.select_library_model)
+        library_layout.addWidget(self.library_table)
+        library_buttons = QHBoxLayout()
+        self.library_refresh = QPushButton("Actualiser la bibliothèque")
+        self.library_refresh.clicked.connect(self.reload_checkpoints)
+        library_buttons.addWidget(self.library_refresh)
+        self.library_open = QPushButton("Ouvrir le dossier du modèle")
+        self.library_open.clicked.connect(self.open_library_model)
+        library_buttons.addWidget(self.library_open)
+        library_layout.addLayout(library_buttons)
+        root.addWidget(library_group)
+        export_group = QGroupBox("4 · Ajouter un modèle Obliteratus à mes IA")
         export_layout = QVBoxLayout(export_group)
         explanation = QLabel("Après la fin du traitement, arrêtez l’atelier avec Arrêter, puis actualisez les sauvegardes. "
                              "La conversion GGUF et l’import Ollama sont automatiques. "
@@ -142,7 +166,7 @@ class ObliteratusTab(QWidget):
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
         self.log.setMaximumBlockCount(2000)
-        root.addWidget(QLabel("4 · Journal et diagnostic"))
+        root.addWidget(QLabel("5 · Journal et diagnostic"))
         root.addWidget(self.log)
         self.reload_checkpoints()
         self.update_buttons()
@@ -151,14 +175,44 @@ class ObliteratusTab(QWidget):
         current = self.checkpoints.currentData()
         self.checkpoints.clear()
         try:
-            for path in oe.checkpoints():
-                self.checkpoints.addItem(path.parent.name, str(path))
+            models = oe.model_library()
+            self.library_table.setRowCount(0)
+            for model in models:
+                path = model['path']
+                self.checkpoints.addItem(model['run'], path)
+                row = self.library_table.rowCount()
+                self.library_table.insertRow(row)
+                exports = model['exports']
+                values = (model['run'], model['family'],
+                          f"{model['size'] / (1024 ** 3):.2f} Go",
+                          ', '.join(item['name'] for item in exports) if exports else 'À convertir')
+                for col, value in enumerate(values):
+                    item = QTableWidgetItem(value)
+                    item.setData(Qt.ItemDataRole.UserRole, path)
+                    self.library_table.setItem(row, col, item)
+            self.library_table.resizeColumnsToContents()
         except OSError as error:
             self.status.setText("Lecture des sauvegardes impossible : " + str(error))
         index = self.checkpoints.findData(current)
         if index >= 0:
             self.checkpoints.setCurrentIndex(index)
         self.update_buttons()
+
+    def select_library_model(self):
+        row = self.library_table.currentRow()
+        if row < 0 or not self.library_table.item(row, 0):
+            return
+        path = self.library_table.item(row, 0).data(Qt.ItemDataRole.UserRole)
+        index = self.checkpoints.findData(path)
+        if index >= 0:
+            self.checkpoints.setCurrentIndex(index)
+            self.export_name.setText('obliteratus-' + self.library_table.item(row, 0).text()[-12:].lower())
+
+    def open_library_model(self):
+        row = self.library_table.currentRow()
+        if row >= 0 and self.library_table.item(row, 0):
+            QDesktopServices.openUrl(QUrl.fromLocalFile(
+                self.library_table.item(row, 0).data(Qt.ItemDataRole.UserRole)))
 
     def choose_checkpoint(self):
         path = QFileDialog.getExistingDirectory(self, "Dossier checkpoint contenant les Safetensors")
@@ -199,7 +253,8 @@ class ObliteratusTab(QWidget):
         self.start.setEnabled(not busy and ob.environment_python().is_file())
         self.stop.setEnabled(busy)
         self.open.setEnabled(self.mode == "server" and not self.cancelled)
-        for widget in (self.checkpoints, self.refresh_exports, self.browse_export, self.export_name):
+        for widget in (self.checkpoints, self.refresh_exports, self.browse_export, self.export_name,
+                       self.library_refresh, self.library_table, self.library_open):
             widget.setEnabled(not busy)
         self.export_button.setEnabled(not busy and self.checkpoints.count() > 0 and ob.environment_python().is_file())
 
@@ -340,6 +395,8 @@ class ObliteratusTab(QWidget):
         self.queue.clear()
         self.mode = ""
         self.status.setText(message)
+        if ok and self.mode == "":
+            self.reload_checkpoints()
         self.update_buttons()
 
     def failed(self, error):
