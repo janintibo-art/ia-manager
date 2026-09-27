@@ -1,12 +1,14 @@
 """Installation isolée et lancement de l'interface officielle Obliteratus."""
+from pathlib import Path
 from PyQt6.QtCore import QProcess, QProcessEnvironment, QTimer, QUrl
 from PyQt6.QtGui import QDesktopServices, QTextCursor
 from PyQt6.QtWidgets import (
     QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit,
-    QPushButton, QSpinBox, QVBoxLayout, QWidget,
+    QPushButton, QSpinBox, QVBoxLayout, QWidget, QComboBox, QGroupBox, QMessageBox,
 )
 from src.backend import obliteratus as ob, settings, local_jobs
 from src.backend import python_detection as pd
+from src.backend import obliteratus_export as oe
 
 
 class ObliteratusTab(QWidget):
@@ -87,7 +89,7 @@ class ObliteratusTab(QWidget):
             "Le Python choisi sert uniquement à créer cet environnement. "
             "Le serveur local écoute sur ce PC ; la télémétrie est désactivée pour ce lancement. "
             "Les modèles GGUF/Ollama ne se modifient pas directement ici : "
-            "l'export et sa conversion éventuelle restent à effectuer dans les outils adaptés.")
+            "utilisez la section Ajouter à mes IA pour convertir un checkpoint sauvegardé et l’importer dans Ollama.")
         note.setWordWrap(True)
         root.addWidget(note)
         title = QLabel("2 · Installer, puis lancer l’atelier")
@@ -108,12 +110,82 @@ class ObliteratusTab(QWidget):
         self.status = QLabel("Version locale indépendante · installation nécessaire avant le premier lancement.")
         self.status.setWordWrap(True)
         root.addWidget(self.status)
+        export_group = QGroupBox("3 · Ajouter un modèle Obliteratus à mes IA")
+        export_layout = QVBoxLayout(export_group)
+        explanation = QLabel("Après la fin du traitement, arrêtez l’atelier avec Arrêter, puis actualisez les sauvegardes. "
+                             "La conversion GGUF et l’import Ollama sont automatiques. "
+                             "Premier usage : téléchargement des outils ; prévoir plusieurs Go libres.")
+        explanation.setWordWrap(True)
+        export_layout.addWidget(explanation)
+        export_row = QHBoxLayout()
+        self.checkpoints = QComboBox()
+        self.checkpoints.setMinimumContentsLength(22)
+        self.checkpoints.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        export_row.addWidget(self.checkpoints, 1)
+        self.refresh_exports = QPushButton("Actualiser")
+        self.refresh_exports.clicked.connect(self.reload_checkpoints)
+        export_row.addWidget(self.refresh_exports)
+        self.browse_export = QPushButton("Autre dossier…")
+        self.browse_export.clicked.connect(self.choose_checkpoint)
+        export_row.addWidget(self.browse_export)
+        export_layout.addLayout(export_row)
+        export_row = QHBoxLayout()
+        self.export_name = QLineEdit("tinyllama-obliteratus")
+        self.export_name.setPlaceholderText("Nom dans Ollama")
+        export_row.addWidget(QLabel("Nom dans mes IA"))
+        export_row.addWidget(self.export_name, 1)
+        self.export_button = QPushButton("Convertir et ajouter à mes IA")
+        self.export_button.clicked.connect(self.export_checkpoint)
+        export_row.addWidget(self.export_button)
+        export_layout.addLayout(export_row)
+        root.addWidget(export_group)
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
         self.log.setMaximumBlockCount(2000)
-        root.addWidget(QLabel("3 · Journal et diagnostic"))
+        root.addWidget(QLabel("4 · Journal et diagnostic"))
         root.addWidget(self.log)
+        self.reload_checkpoints()
         self.update_buttons()
+
+    def reload_checkpoints(self):
+        current = self.checkpoints.currentData()
+        self.checkpoints.clear()
+        try:
+            for path in oe.checkpoints():
+                self.checkpoints.addItem(path.parent.name, str(path))
+        except OSError as error:
+            self.status.setText("Lecture des sauvegardes impossible : " + str(error))
+        index = self.checkpoints.findData(current)
+        if index >= 0:
+            self.checkpoints.setCurrentIndex(index)
+        self.update_buttons()
+
+    def choose_checkpoint(self):
+        path = QFileDialog.getExistingDirectory(self, "Dossier checkpoint contenant les Safetensors")
+        if path:
+            if not oe.valid_checkpoint(path):
+                self.status.setText("Ce dossier ne contient pas un checkpoint Safetensors complet.")
+                return
+            self.checkpoints.addItem(path, path)
+            self.checkpoints.setCurrentIndex(self.checkpoints.count() - 1)
+            self.update_buttons()
+
+    def export_checkpoint(self):
+        if self.mode or self.detecting:
+            return
+        name = self.export_name.text().strip()
+        answer = QMessageBox.question(self, "Ajouter à Ollama", "Importer sous le nom « " + name +
+            " » ? Si ce nom existe déjà dans Ollama, il sera remplacé. "
+            "Choisissez un autre nom pour conserver les deux versions.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            steps = oe.make_steps(self.checkpoints.currentData() or "", name, ob.environment_python())
+            self.status.setText("Conversion puis import en cours · progression dans le journal.")
+            self.run_steps(steps, "export")
+        except Exception as error:
+            self.status.setText(str(error))
 
     def choose_python(self):
         path, _ = QFileDialog.getOpenFileName(self, "Choisir python.exe ou python3")
@@ -127,6 +199,9 @@ class ObliteratusTab(QWidget):
         self.start.setEnabled(not busy and ob.environment_python().is_file())
         self.stop.setEnabled(busy)
         self.open.setEnabled(self.mode == "server" and not self.cancelled)
+        for widget in (self.checkpoints, self.refresh_exports, self.browse_export, self.export_name):
+            widget.setEnabled(not busy)
+        self.export_button.setEnabled(not busy and self.checkpoints.count() > 0 and ob.environment_python().is_file())
 
     def run_steps(self, steps, mode):
         if self.mode:
@@ -142,6 +217,10 @@ class ObliteratusTab(QWidget):
         program, args = self.queue.pop(0)
         ob.tools_dir().mkdir(parents=True, exist_ok=True)
         self.process.setWorkingDirectory(str(ob.tools_dir()))
+        if self.mode == "export":
+            source = Path.home() / "ia-conversion/llama.cpp-master"
+            if source.is_dir():
+                self.process.setWorkingDirectory(str(source))
         env = QProcessEnvironment.systemEnvironment()
         for key, value in {"PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8",
                            "OBLITERATUS_TELEMETRY": "0", "GRADIO_ANALYTICS_ENABLED": "False"}.items():
@@ -254,6 +333,8 @@ class ObliteratusTab(QWidget):
             message = f"Échec (code {code}) · consultez le journal ci-dessous."
         elif self.mode == "install":
             message = "Installation terminée. Vous pouvez lancer Obliteratus en local."
+        elif self.mode == "export":
+            message = "Modèle ajouté à Ollama. Ouvrez Chat, cliquez sur 🔄, puis sélectionnez « " + self.export_name.text().strip() + " »."
         else:
             message = "Serveur local arrêté."
         self.queue.clear()
