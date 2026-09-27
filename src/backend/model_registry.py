@@ -45,6 +45,13 @@ CATEGORIES: Dict[str, Dict[str, str]] = {
                 "ni l'exactitude ni l'absence de refus. Les longues fenêtres de contexte consomment "
                 "davantage de mémoire que la taille du téléchargement affichée.",
     },
+    "creative": {
+        "label": "✍️ Création et histoires",
+        "desc": "Inventez des personnages, dialogues, quêtes et scénarios de jeux. "
+                "Pour commencer : Qwen 2.5 3B sur un PC modeste, Qwen 3 4B pour des idées rapides, "
+                "Qwen 2.5 14B pour des récits plus détaillés. Dans le Chat, essayez : "
+                "« Imagine une quête fantasy avec un choix difficile et trois issues ».",
+    },
 }
 
 # size_gb : taille du téléchargement ≈ mémoire occupée par le modèle.
@@ -612,11 +619,35 @@ UNCENSORED_MODELS = [
        ["Contexte 64k"], ["Réservé aux machines dotées de beaucoup de mémoire"], "Station de travail haut de gamme"),
 ]
 MODELS += UNCENSORED_MODELS
+CREATIVE_MODELS = [
+    _m("qwen2.5:1.5b-instruct", "Qwen 2.5 1.5B · idées rapides", "creative", "Alibaba", "1.5b", 0.986, 2, 3, "32k",
+       "Petit modèle pour trouver des idées de personnages et de situations. Environ 1 Go à télécharger.",
+       ["Très léger", "Idées rapides"], ["Récits longs moins cohérents"], "PC modeste"),
+    _m("qwen2.5:3b-instruct", "Qwen 2.5 3B · personnages", "creative", "Alibaba", "3b", 1.9, 3, 3, "32k",
+       "Conçoit des personnages, leurs motivations et de courts dialogues. Environ 1,9 Go.",
+       ["Bon point de départ", "Français utilisable"], ["Moins de détails qu'un grand modèle"], "PC courant"),
+    _m("qwen3:4b-instruct", "Qwen 3 4B · dialogues", "creative", "Alibaba", "4b", 2.5, 3, 3, "256k",
+       "Variante instruct pour imaginer des scènes et poursuivre un dialogue. Environ 2,5 Go.",
+       ["Création et jeu de rôle", "Grand contexte annoncé"], ["Un contexte long demande plus de RAM"], "PC courant"),
+    _m("qwen2.5:7b-instruct", "Qwen 2.5 7B · quêtes", "creative", "Alibaba", "7b", 4.7, 3, 3, "32k",
+       "Aide à concevoir des quêtes, rebondissements et descriptions de lieux. Environ 4,7 Go.",
+       ["Bon équilibre entre taille et détails"], ["Prévoir de la mémoire pour le contexte"], "PC doté de 16 Go de RAM"),
+    _m("llama3.1:8b-instruct-q4_K_M", "Llama 3.1 8B · récits", "creative", "Meta", "8b", 4.9, 3, 2, "128k",
+       "Modèle généraliste utile pour bâtir un univers et réécrire des scènes. Environ 4,9 Go.",
+       ["Narration et réécriture"], ["Résultats en français à relire"], "PC doté de 16 Go de RAM"),
+    _m("qwen2.5:14b-instruct", "Qwen 2.5 14B · scénarios", "creative", "Alibaba", "14b", 9.0, 4, 3, "32k",
+       "Pour étoffer les dialogues, la trame d'une quête ou le passé des personnages. Environ 9 Go.",
+       ["Davantage de détails", "Bon pour écrire en français"], ["Plus lent et plus gourmand"], "PC doté de 24 Go de RAM"),
+    _m("qwen3:30b-a3b-instruct-2507-q4_K_M", "Qwen 3 30B · univers détaillés", "creative", "Alibaba", "30b", 19, 4, 3, "256k",
+       "Grand modèle instruct pour développer des intrigues, des factions et des histoires suivies. Environ 19 Go.",
+       ["Univers et scénarios complexes"], ["Exige beaucoup de mémoire, surtout avec un long contexte"], "Station de travail"),
+]
+MODELS += CREATIVE_MODELS
 # Modèles à usage unique : visibles dans le catalogue mais jamais « conseillés »
 NICHE_IDS = {"glm-ocr:latest", "starcoder2:7b", "nuextract:3.8b", "reader-lm:1.5b",
              "sqlcoder:7b", "sailor2:8b", "medgemma:4b"}
 # Catégories présentes dans le tableau de recommandations
-RECO_CATEGORIES = [c for c in CATEGORIES if c not in ("special", "uncensored")]
+RECO_CATEGORIES = [c for c in CATEGORIES if c not in ("special", "uncensored", "creative")]
 
 FIT_LABELS = {
     "gpu": ("✅", "Rapide", "Tient entièrement dans la carte graphique"),
