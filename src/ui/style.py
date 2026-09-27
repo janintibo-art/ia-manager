@@ -40,6 +40,13 @@ def code_colors() -> dict:
 
 
 def build_stylesheet() -> str:
+    dark = CURRENT_THEME == "sombre"
+    card_top = "#2a2b39" if dark else "#ffffff"
+    card_bottom = "#1c1d27" if dark else "#f7f8fc"
+    rail_top = "#252635" if dark else "#ffffff"
+    rail_bottom = "#1a1b25" if dark else "#f4f5fb"
+    edge_light = "#46475f" if dark else "#ffffff"
+    page_bottom = "#101119" if dark else "#e9ebf3"
     return f"""
 QWidget {{
     background-color: {BG};
@@ -96,8 +103,10 @@ QLabel#Status {{
 }}
 
 QFrame#Card {{
-    background-color: {SURFACE};
+    background: qlineargradient(x1:0, y1:0, x2:0.9, y2:1,
+                                stop:0 {card_top}, stop:1 {card_bottom});
     border: 1px solid {BORDER};
+    border-top: 1px solid {edge_light};
     border-radius: 12px;
 }}
 QFrame#Card QLabel {{
@@ -309,9 +318,15 @@ QSplitter::handle {{
 
 /* Atelier v53 : surfaces, navigation et retours d'interaction. */
 QFrame#NavigationRail {{
-    background-color: {SURFACE};
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                                stop:0 {rail_top}, stop:1 {rail_bottom});
     border: 1px solid {BORDER};
+    border-top: 1px solid {edge_light};
     border-radius: 16px;
+}}
+QWidget#StudioShell {{
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                                stop:0 {BG}, stop:1 {page_bottom});
 }}
 QFrame#NavigationRail QLabel, QFrame#NavigationRail QWidget {{
     background: transparent;
@@ -344,7 +359,8 @@ QListWidget#StudioNavigation::item:disabled {{
     padding: 14px 12px 4px 12px;
 }}
 QListWidget#StudioNavigation::item:selected {{
-    background: {SURFACE_2};
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                stop:0 {SURFACE_2}, stop:1 {SURFACE});
     color: {TEXT};
     border: 1px solid {ACCENT};
     border-left: 4px solid {ACCENT};
@@ -352,8 +368,9 @@ QListWidget#StudioNavigation::item:selected {{
 QListWidget#StudioNavigation::item:hover:enabled {{ background: {SURFACE_2}; }}
 QFrame#StudioHeader {{
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                                stop:0 {SURFACE_2}, stop:1 {SURFACE});
+                                stop:0 {rail_top}, stop:1 {SURFACE});
     border: 1px solid {BORDER};
+    border-top: 1px solid {edge_light};
     border-radius: 14px;
 }}
 QFrame#StudioHeader QLabel {{ background: transparent; }}

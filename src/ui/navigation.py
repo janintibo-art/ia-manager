@@ -1,9 +1,13 @@
 """Habillage de navigation, indépendant du fonctionnement des onglets."""
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QColor, QPixmap
 from PyQt6.QtWidgets import (
-    QFrame, QHBoxLayout, QLabel, QListWidget, QListWidgetItem,
+    QFrame, QGraphicsDropShadowEffect, QHBoxLayout, QLabel, QListWidget, QListWidgetItem,
     QSizePolicy, QVBoxLayout, QWidget,
 )
+
+from src.ui import style
+from src.ui.branding import asset
 
 # Indices conservés pour les raccourcis et les liens entre écrans existants.
 SECTIONS = (
@@ -39,9 +43,12 @@ class StudioShell(QWidget):
         rail.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
         left = QVBoxLayout(rail)
         left.setContentsMargins(12, 18, 12, 12)
-        brand = QLabel("IA Manager")
-        brand.setObjectName("Brand")
-        left.addWidget(brand)
+        self.brand = QLabel("IA Manager")
+        self.brand.setObjectName("Brand")
+        self.brand.setFixedHeight(62)
+        self.brand.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        left.addWidget(self.brand)
+        self.update_brand()
         caption = QLabel("VOTRE ATELIER IA")
         caption.setObjectName("NavigationCaption")
         left.addWidget(caption)
@@ -69,6 +76,12 @@ class StudioShell(QWidget):
         header.setObjectName("StudioHeader")
         head = QVBoxLayout(header)
         head.setContentsMargins(20, 16, 20, 16)
+        for panel, blur, offset in ((rail, 26, 8), (header, 20, 5)):
+            shadow = QGraphicsDropShadowEffect(panel)
+            shadow.setBlurRadius(blur)
+            shadow.setOffset(0, offset)
+            shadow.setColor(QColor(0, 0, 0, 78))
+            panel.setGraphicsEffect(shadow)
         self.section = QLabel()
         self.section.setObjectName("NavigationCaption")
         self.title = QLabel()
@@ -85,6 +98,17 @@ class StudioShell(QWidget):
         self.navigation.currentItemChanged.connect(self._navigate)
         tabs.currentChanged.connect(self._sync)
         self._sync(tabs.currentIndex())
+
+    def update_brand(self):
+        """Le logo clair est réservé au fond sombre ; le texte suit le thème clair."""
+        if style.CURRENT_THEME == "sombre":
+            pix = QPixmap(str(asset("ia_manager_logo.png")))
+            if not pix.isNull():
+                self.brand.setPixmap(pix.scaled(192, 62, Qt.AspectRatioMode.KeepAspectRatio,
+                                               Qt.TransformationMode.SmoothTransformation))
+                return
+        self.brand.setPixmap(QPixmap())
+        self.brand.setText("IA Manager")
 
     def _navigate(self, item, previous):
         if item is not None:

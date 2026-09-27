@@ -42,7 +42,7 @@ jobs:
 
       - name: Build EXE
         timeout-minutes: 15
-        run: pyinstaller --onefile --windowed --name ia_manager --hidden-import pkgutil --hidden-import anyio._backends._asyncio main.py
+        run: pyinstaller --onefile --windowed --name ia_manager --icon assets/branding/ia_manager.ico --add-data "assets/branding;assets/branding" --hidden-import pkgutil --hidden-import anyio._backends._asyncio main.py
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

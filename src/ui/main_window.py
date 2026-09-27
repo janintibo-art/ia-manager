@@ -3,7 +3,7 @@
 from typing import Dict, List, Optional, Set
 
 from PyQt6.QtCore import QTimer
-from PyQt6.QtGui import QAction, QFont
+from PyQt6.QtGui import QAction, QFont, QIcon
 from PyQt6.QtWidgets import (
     QApplication, QFrame, QHBoxLayout, QMainWindow, QMenu, QPushButton, QStyle, QSystemTrayIcon, QTabWidget,
     QVBoxLayout, QWidget, QLabel,
@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
 
 from src.backend import code_tools, settings
 from src.ui import style
+from src.ui.branding import asset
 from src.ui.navigation import StudioShell
 from src.backend import tasks as tk
 from src.ui.tabs.bench_tab import BenchTab
@@ -232,6 +233,7 @@ class MainWindow(QMainWindow):
         app = QApplication.instance()
         app.setFont(QFont("Segoe UI", style.BASE_FONT_PT))
         app.setStyleSheet(style.build_stylesheet())
+        self.studio_shell.update_brand()
         if toggle:
             self.chat_tab.status.setText("🌓 Thème changé : les nouveaux messages utilisent les nouvelles couleurs.")
 
@@ -239,7 +241,9 @@ class MainWindow(QMainWindow):
     def setup_tray(self):
         if not QSystemTrayIcon.isSystemTrayAvailable():
             return
-        icon = self.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon)
+        icon = QIcon(str(asset("ia_manager_icon.png")))
+        if icon.isNull():
+            icon = self.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon)
         self.setWindowIcon(icon)
         self.tray = QSystemTrayIcon(icon, self)
         self.tray.setToolTip("IA Manager")

@@ -9,11 +9,12 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QIcon
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
 from src.backend import settings
 from src.ui import style
+from src.ui.branding import asset
 from src.ui.main_window import MainWindow
 
 LOG_FILE = Path.home() / ".ia_manager" / "erreurs.log"
@@ -48,6 +49,7 @@ def main():
 
     app = QApplication(sys.argv)
     app.setApplicationName("IA Manager")
+    app.setWindowIcon(QIcon(str(asset("ia_manager_icon.png"))))
     # La fenêtre peut être réduite près de l'horloge (tâches planifiées) : on quitte explicitement
     app.setQuitOnLastWindowClosed(False)
     style.apply_theme(settings.get("theme") or "sombre", settings.get("font_size") or 13)
