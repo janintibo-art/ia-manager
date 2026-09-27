@@ -1,7 +1,7 @@
 """État mémoire et commandes explicites de déchargement Ollama."""
-from PyQt6.QtWidgets import QWidget,QVBoxLayout,QLabel,QCheckBox,QPushButton,QListWidget,QListWidgetItem,QMessageBox
+from PyQt6.QtWidgets import QWidget,QVBoxLayout,QLabel,QCheckBox,QPushButton,QListWidget,QListWidgetItem,QMessageBox,QPlainTextEdit,QApplication
 from PyQt6.QtCore import Qt,QTimer
-from src.backend import settings,local_jobs,dashboard,model_options
+from src.backend import settings,local_jobs,dashboard,model_options,diagnostic_report
 from src.backend.ai_manager import AIManager
 from src.backend import model_search
 from src.ui.workers import FunctionWorker
@@ -32,6 +32,15 @@ class ResourcesTab(QWidget):
         self.cache_btn=QPushButton("Rafraîchir les caches IA")
         self.cache_btn.setToolTip("Force la relecture des modèles et de leurs métadonnées au prochain appel.")
         self.cache_btn.clicked.connect(self.clear_caches);lay.addWidget(self.cache_btn)
+        self.report_btn=QPushButton("Créer un diagnostic à partager")
+        self.report_btn.clicked.connect(self.create_diagnostic);lay.addWidget(self.report_btn)
+        self.report=QPlainTextEdit()
+        self.report.setReadOnly(True)
+        self.report.setPlaceholderText("Le rapport s'affichera ici, sans jetons ni chemins personnels.")
+        self.report.setMinimumHeight(150);lay.addWidget(self.report)
+        self.copy_report_btn=QPushButton("Copier le diagnostic")
+        self.copy_report_btn.clicked.connect(lambda: QApplication.clipboard().setText(self.report.toPlainText()))
+        lay.addWidget(self.copy_report_btn)
         self.timer=QTimer(self);self.timer.timeout.connect(self.update_queue);self.timer.start(1000)
         self.update_queue()
 
@@ -54,6 +63,19 @@ class ResourcesTab(QWidget):
         self.worker=FunctionWorker(dashboard.snapshot,self.ai)
         self.worker.done.connect(self.on_snapshot)
         self.worker.start()
+
+    def create_diagnostic(self):
+        if self.worker:return
+        self.report.setPlainText("Collecte des informations en cours…")
+        self.report_btn.setEnabled(False)
+        self.worker=FunctionWorker(diagnostic_report.create_report)
+        self.worker.done.connect(self.on_diagnostic)
+        self.worker.start()
+
+    def on_diagnostic(self,ok,result):
+        self.worker=None
+        self.report_btn.setEnabled(True)
+        self.report.setPlainText(result if ok else "Diagnostic indisponible : " + str(result))
 
     def on_snapshot(self,ok,result):
         self.worker=None;self.refresh_btn.setEnabled(True)
