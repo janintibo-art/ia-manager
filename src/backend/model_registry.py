@@ -60,6 +60,14 @@ CATEGORIES: Dict[str, Dict[str, str]] = {
                 "Les PDF contenant du texte sélectionnable sont lus directement ; pour les PDF scannés, "
                 "joignez une image de chaque page à lire.",
     },
+    "research": {
+        "label": "🔎 Recherche dans mes fichiers",
+        "desc": "Dans l'Espace de travail, choisissez un projet et ajoutez vos documents à sa mémoire. "
+                "Dans le Chat, sélectionnez le même projet, activez la mémoire documentaire et "
+                "posez une question : l'IA reçoit les extraits trouvés et cite [D1], [D2]… "
+                "La recherche locale utilise les mots du document ; ces modèles servent à répondre "
+                "à partir des extraits, sans indexation par embeddings pour le moment.",
+    },
 }
 
 # size_gb : taille du téléchargement ≈ mémoire occupée par le modèle.
@@ -285,7 +293,7 @@ MODELS += [
        "Petit modèle d'IBM pensé pour les entreprises : suit très bien les consignes et sait utiliser des outils.",
        ["Obéit précisément aux consignes", "Léger", "Licence très libre (Apache 2.0)"],
        ["Style un peu sec"], "Assistant qui doit respecter des règles précises."),
-    _m("granite3.3:8b", "Granite 3.3 8B", "chat", "IBM", "8 milliards", 4.9, 3, 2, "128k",
+    _m("granite3.3:8b", "Granite 3.3 8B · synthèse", "research", "IBM", "8 milliards", 4.9, 3, 2, "128k",
        "Modèle professionnel d'IBM, sérieux et fiable, avec un mode réflexion.",
        ["Réponses sobres et fiables", "Bon pour résumer des documents"],
        ["Peu créatif"], "Usage professionnel, résumés, e-mails."),
@@ -458,9 +466,9 @@ MODELS += [
     _m("aya-expanse:32b", "Aya Expanse 32B", "lang", "Cohere", "32 milliards", 20.0, 5, 3, "128k",
        "Grande version d'Aya : qualité multilingue de haut niveau.",
        ["Très haute qualité en 23 langues"], ["Carte 24 Go conseillée"], "Traduction et rédaction multilingue exigeantes."),
-    _m("command-r7b:7b", "Command R7B", "lang", "Cohere", "7 milliards", 5.1, 3, 3, "128k",
+    _m("command-r7b:7b", "Command R7B · questions sur fichiers", "research", "Cohere", "7 milliards", 5.1, 3, 3, "8k",
        "Modèle de Cohere taillé pour travailler sur vos documents (RAG), multilingue.",
-       ["Cite ses sources", "Multilingue", "Long contexte"], ["Moins créatif"], "Questions sur vos propres documents."),
+       ["Adapté au RAG", "Multilingue"], ["Contexte 8k ; vérifiez les citations"], "Questions sur vos propres documents."),
     _m("sailor2:8b", "Sailor2 8B", "lang", "Sea AI Lab", "8 milliards", 5.2, 3, 1, "32k",
        "Spécialisé dans les langues d'Asie du Sud-Est (vietnamien, thaï, indonésien…).",
        ["Langues d'Asie du Sud-Est"], ["Français faible"], "Communiquer en langues asiatiques."),
@@ -527,7 +535,7 @@ EXTRA_MODELS = [
     _m("qwen2.5vl:3b", "Qwen 2.5 VL 3b", "vision", "Alibaba", "3b", 3.2, 3, 3, "125k", "Modèle multimodal pour analyser les images dans les interfaces compatibles. Fichier Ollama d'environ 3.2 Go.", ["Analyse d'images"], ["Qualité et vitesse selon le matériel"], "PC courant"),
     _m("qwen2.5vl:32b", "Qwen 2.5 VL 32b", "vision", "Alibaba", "32b", 21, 5, 3, "125k", "Modèle multimodal pour analyser les images dans les interfaces compatibles. Fichier Ollama d'environ 21 Go.", ["Analyse d'images"], ["Demande beaucoup de mémoire"], "Station de travail avec beaucoup de mémoire"),
     _m("qwen2.5vl:72b", "Qwen 2.5 VL 72b", "vision", "Alibaba", "72b", 49, 5, 3, "125k", "Modèle multimodal pour analyser les images dans les interfaces compatibles. Fichier Ollama d'environ 49 Go.", ["Analyse d'images"], ["Demande beaucoup de mémoire"], "Station de travail avec beaucoup de mémoire"),
-    _m("granite3.3:2b", "granite3.3 2b", "light", "IBM", "2b", 1.5, 2, 2, "128k", "Variante compacte pour les PC modestes ou les réponses rapides. Fichier Ollama d'environ 1.5 Go.", ["Peu gourmand en mémoire"], ["Qualité et vitesse selon le matériel"], "PC courant"),
+    _m("granite3.3:2b", "Granite 3.3 2B · dossiers légers", "research", "IBM", "2b", 1.5, 2, 2, "128k", "Petit assistant pour synthétiser les extraits retrouvés dans les fichiers du projet. Environ 1,5 Go.", ["Léger", "Contexte annoncé de 128k"], ["Vérifiez les réponses dans les extraits cités"], "PC modeste"),
     _m("translategemma:27b", "TranslateGemma 27b", "lang", "Google", "27b", 17, 5, 3, "128k", "Modèle destiné aux tâches de traduction et aux langues. Fichier Ollama d'environ 17 Go.", ["Fonctionne en local"], ["Demande beaucoup de mémoire"], "Station de travail avec beaucoup de mémoire"),
     _m("llama3:70b", "Llama 3 70b", "chat", "Meta", "70b", 40, 5, 2, "8k", "Assistant de conversation local pour discuter, rédiger et résumer des textes. Fichier Ollama d'environ 40 Go.", ["Fonctionne en local"], ["Demande beaucoup de mémoire"], "Station de travail avec beaucoup de mémoire"),
     _m("llama3.2-vision:90b", "Llama 3.2 Vision 90b", "vision", "Meta", "90b", 55, 5, 2, "128k", "Modèle multimodal pour analyser les images dans les interfaces compatibles. Fichier Ollama d'environ 55 Go.", ["Analyse d'images"], ["Demande beaucoup de mémoire"], "Station de travail avec beaucoup de mémoire"),
@@ -660,11 +668,17 @@ DOCUMENT_MODELS = [
        ["Extraction de texte"], ["Vérifiez la version d'Ollama avant le téléchargement"], "PC doté de 16 Go de RAM"),
 ]
 MODELS += DOCUMENT_MODELS
+RESEARCH_MODELS = [
+    _m("command-r:35b", "Command R 35B · gros dossiers", "research", "Cohere", "35b", 19, 4, 2, "128k",
+       "Modèle pour analyser de longs extraits de documents et répondre aux questions. Environ 19 Go.",
+       ["RAG et synthèse", "Long contexte"], ["Demande beaucoup de RAM ; le contexte augmente la consommation"], "Station de travail"),
+]
+MODELS += RESEARCH_MODELS
 # Modèles à usage unique : visibles dans le catalogue mais jamais « conseillés »
 NICHE_IDS = {"glm-ocr:latest", "starcoder2:7b", "nuextract:3.8b", "reader-lm:1.5b",
              "sqlcoder:7b", "sailor2:8b", "medgemma:4b"}
 # Catégories présentes dans le tableau de recommandations
-RECO_CATEGORIES = [c for c in CATEGORIES if c not in ("special", "uncensored", "creative", "documents")]
+RECO_CATEGORIES = [c for c in CATEGORIES if c not in ("special", "uncensored", "creative", "documents", "research")]
 
 FIT_LABELS = {
     "gpu": ("✅", "Rapide", "Tient entièrement dans la carte graphique"),

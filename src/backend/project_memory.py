@@ -62,15 +62,20 @@ def search(folder, query, limit=4):
     words = [w for w in dict.fromkeys(re.findall(r"[\w]+", fold(query))) if len(w)>2 and w not in stop][:16]
     if not words:
         return []
-    condition = " OR ".join("instr(p.folded, ?) > 0" for _ in words)
+    # Chercher aussi dans le nom : une question peut citer un fichier sans reprendre son texte.
+    condition = " OR ".join("(instr(p.folded, ?) > 0 OR instr(lower(d.name), ?) > 0)" for _ in words)
     with connect(folder) as db:
         rows = db.execute("SELECT d.name,p.number,p.text,p.folded FROM passages p JOIN documents d ON d.id=p.doc WHERE "
-                          + condition, words).fetchall()
+                          + condition, [part for word in words for part in (word, word)]).fetchall()
     ranked = []
+    phrase = " ".join(words) if len(words) > 1 else ""
     for name, number, text, folded in rows:
         hits = sum(bool(re.search(r"\b"+re.escape(w)+r"\b", folded)) for w in words)
-        if hits:
-            ranked.append({"name": name, "passage": number, "text": text, "score": hits})
+        filename = fold(name)
+        name_hits = sum(bool(re.search(r"\b"+re.escape(w)+r"\b", filename)) for w in words)
+        if hits or name_hits:
+            score = hits + 2 * name_hits + (3 if phrase and phrase in folded else 0)
+            ranked.append({"name": name, "passage": number, "text": text, "score": score})
     ranked.sort(key=lambda row: (-row["score"], row["name"], row["passage"]))
     return ranked[:limit]
 
