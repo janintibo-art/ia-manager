@@ -1,5 +1,7 @@
 """Onglet GitHub - actions git/gh sur le PC et générateur de commandes Termux"""
 
+import json
+import re
 import shutil
 from typing import Dict, List, Optional
 
@@ -131,6 +133,7 @@ class GithubTab(QWidget):
         self.runner = CommandRunner(self)
         self.runner.output.connect(self.append_output)
         self.runner.done.connect(self.on_done)
+        self.build_checks = []
         self.command_blocks: List[QWidget] = []
         self.init_ui()
         self.refresh_projects()
@@ -198,6 +201,27 @@ class GithubTab(QWidget):
         check_btn.clicked.connect(self.check_login)
         tl.addWidget(check_btn)
         lay.addWidget(tools)
+
+        builds = QFrame()
+        builds.setObjectName("Card")
+        builds_layout = QVBoxLayout(builds)
+        builds_layout.addWidget(QLabel("Compilations du projet sélectionné"))
+        self.windows_build = QLabel("Windows : cliquez sur Vérifier les compilations.")
+        self.android_build = QLabel("Android : cliquez sur Vérifier les compilations.")
+        builds_layout.addWidget(self.windows_build)
+        builds_layout.addWidget(self.android_build)
+        builds_actions = QHBoxLayout()
+        self.check_builds_btn = QPushButton("Vérifier les compilations")
+        self.check_builds_btn.clicked.connect(self.check_builds)
+        builds_actions.addWidget(self.check_builds_btn)
+        windows_download = QPushButton("Télécharger l’EXE")
+        windows_download.clicked.connect(lambda: self.open_release("windows"))
+        builds_actions.addWidget(windows_download)
+        android_download = QPushButton("Télécharger l’APK")
+        android_download.clicked.connect(lambda: self.open_release("android"))
+        builds_actions.addWidget(android_download)
+        builds_layout.addLayout(builds_actions)
+        lay.addWidget(builds)
 
         folder_row = QHBoxLayout()
         folder_row.addWidget(QLabel("Dossier du dépôt :"))
@@ -378,6 +402,73 @@ class GithubTab(QWidget):
             self.folder_edit.setText(meta["pc_folder"])
             settings.set("github_folder", meta["pc_folder"])
         self.update_termux()
+
+    def selected_repo(self):
+        pid = self.project_combo.currentData()
+        meta = get_project_manager().get(pid) if pid else {}
+        repo = (meta or {}).get("github_repo", "") or self.clone_edit.text().strip()
+        repo = gt.full_repo(self.owner_edit.text(), repo)
+        return repo if re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo) else ""
+
+    def open_release(self, platform):
+        repo = self.selected_repo()
+        if not repo:
+            QMessageBox.information(self, "Dépôt manquant", "Sélectionnez un projet lié à GitHub ou indiquez propriétaire/depot dans le champ Dépôt à cloner.")
+            return
+        path = ("releases/latest/download/ia_manager.exe" if platform == "windows"
+                else "releases/download/android-latest/ia_manager_android.apk")
+        QDesktopServices.openUrl(QUrl(f"https://github.com/{repo}/{path}"))
+
+    def check_builds(self):
+        repo = self.selected_repo()
+        gh = gt.tool_status()["gh"]
+        if not repo or not gh:
+            QMessageBox.information(self, "Vérification impossible",
+                "Sélectionnez un dépôt GitHub et installez GitHub CLI, puis connectez-vous.")
+            return
+        if self.build_checks:
+            return
+        self.check_builds_btn.setEnabled(False)
+        for workflow, label in (("build.yml", self.windows_build), ("android.yml", self.android_build)):
+            label.setText(("Windows" if workflow == "build.yml" else "Android") + " : vérification…")
+            proc = QProcess(self)
+            proc.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
+            proc.finished.connect(lambda code, status, p=proc, target=label: self.build_finished(p, target, code))
+            proc.errorOccurred.connect(lambda error, p=proc, target=label: self.build_error(p, target, error))
+            self.build_checks.append(proc)
+            proc.start(gh, ["run", "list", "--repo", repo, "--workflow", workflow,
+                            "--limit", "1", "--json", "status,conclusion,displayTitle,url"])
+
+    def build_error(self, proc, label, error):
+        if error == QProcess.ProcessError.FailedToStart:
+            label.setText("Impossible de lancer GitHub CLI.")
+            self.build_complete(proc)
+
+    def build_finished(self, proc, label, code):
+        output = bytes(proc.readAllStandardOutput()).decode("utf-8", errors="replace")
+        if code != 0:
+            label.setText("Vérification impossible : " + gt.strip_ansi(output).strip()[:180])
+        else:
+            try:
+                runs = json.loads(output)
+                if not runs:
+                    label.setText("Aucune compilation trouvée.")
+                else:
+                    run = runs[0]
+                    state = run.get("conclusion") or run.get("status") or "inconnu"
+                    icon = "✅" if state == "success" else "❌" if state == "failure" else "⏳"
+                    label.setText(icon + " " + state + " · " + run.get("displayTitle", ""))
+                    label.setToolTip(run.get("url", ""))
+            except (ValueError, TypeError, AttributeError):
+                label.setText("Réponse GitHub CLI illisible. Consultez l'onglet Actions.")
+        self.build_complete(proc)
+
+    def build_complete(self, proc):
+        if proc in self.build_checks:
+            self.build_checks.remove(proc)
+        proc.deleteLater()
+        if not self.build_checks:
+            self.check_builds_btn.setEnabled(True)
 
     def refresh_tools(self):
         st = gt.tool_status()
