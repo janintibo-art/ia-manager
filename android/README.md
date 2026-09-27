@@ -30,6 +30,16 @@ l'ancienne application avant l'installation suivante. Cela efface son historique
 Pour les prochaines versions durables, une clé de signature privée persistante dans les secrets
 GitHub permettra de garantir les mises à jour sans désinstallation.
 
+## À distance avec Tailscale
+
+Installer Tailscale sur le PC Windows et le téléphone Android, puis connecter les deux appareils
+au même réseau privé Tailscale. Sur le PC, dans **Téléphone**, sélectionner
+**Partout · accès privé Tailscale** et démarrer le serveur. Copier l’adresse HTTPS `*.ts.net:8443`
+affichée et le code d’accès dans l’application Android. Le PC, IA Manager, Ollama et
+Tailscale doivent rester actifs. Aucun port n’est à ouvrir sur la box ; ne pas activer
+Tailscale Funnel (publication sur Internet). Sur Android, un autre VPN peut empêcher Tailscale
+de fonctionner simultanément. Le code change au redémarrage du serveur.
+
 ## Première connexion
 
 1. Mettre PC et téléphone sur le même réseau local (PC Ethernet et téléphone Wi-Fi conviennent).

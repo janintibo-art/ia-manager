@@ -70,7 +70,7 @@ public class MainActivity extends Activity {
         reconnect.setVisibility(View.GONE);
         root.addView(reconnect);
         reconnect.setOnClickListener(v -> connect());
-        address = input("Adresse du PC : http://192.168.1.20:8765", false);
+        address = input("Adresse locale ou HTTPS Tailscale du PC", false);
         address.setSingleLine(true);
         address.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
         address.setText(getPreferences(MODE_PRIVATE).getString("address", ""));
@@ -84,7 +84,7 @@ public class MainActivity extends Activity {
         connect.setOnClickListener(v -> connect());
         models = new Spinner(this);
         root.addView(models);
-        status = text("Même Wi-Fi · démarrez le serveur dans Téléphone sur le PC.", 12);
+        status = text("Même réseau ou accès Tailscale · démarrez le serveur sur le PC.", 12);
         root.addView(status);
         scroll = new ScrollView(this);
         scroll.setFillViewport(true);
@@ -139,13 +139,22 @@ public class MainActivity extends Activity {
         if (!candidate.contains("://")) candidate = "http://" + candidate;
         URI uri = new URI(candidate);
         String host = uri.getHost();
-        if (!"http".equals(uri.getScheme()) || host == null || !host.matches("[0-9.]+")
-                || uri.getUserInfo()!=null || uri.getQuery()!=null || uri.getFragment()!=null
+        if (host == null || uri.getUserInfo()!=null || uri.getQuery()!=null || uri.getFragment()!=null
                 || !(uri.getPath().isEmpty() || uri.getPath().equals("/")))
-            throw new Exception("Saisissez l’adresse HTTP locale affichée sur le PC.");
+            throw new Exception("Recopiez uniquement l’adresse affichée dans l’onglet Téléphone du PC.");
+        if ("https".equalsIgnoreCase(uri.getScheme())) {
+            String dns = host.toLowerCase(Locale.ROOT);
+            // Le certificat TLS standard d'Android vérifie l'adresse *.ts.net.
+            if (!dns.matches("[a-z0-9-]+\\.[a-z0-9-]+\\.ts\\.net")
+                    || (uri.getPort()!=-1 && uri.getPort()!=443 && uri.getPort()!=8443))
+                throw new Exception("Utilisez l’adresse HTTPS Tailscale affichée par le PC.");
+            return "https://"+dns+(uri.getPort()==-1 || uri.getPort()==443 ? "" : ":"+uri.getPort());
+        }
+        if (!"http".equalsIgnoreCase(uri.getScheme()) || !host.matches("[0-9.]+"))
+            throw new Exception("Utilisez l’adresse locale du PC ou son adresse HTTPS Tailscale.");
         InetAddress ip = InetAddress.getByName(host);
         if (!(ip instanceof Inet4Address) || !ip.isSiteLocalAddress())
-            throw new Exception("Utilisez l’adresse Wi-Fi/Ethernet privée du PC (192.168…, 10… ou 172.16–31…).");
+            throw new Exception("L’adresse HTTP doit être celle du réseau privé local du PC.");
         int port = uri.getPort() == -1 ? 8765 : uri.getPort();
         if (port<1024 || port>65535) throw new Exception("Port invalide.");
         return "http://"+host+":"+port;
@@ -226,8 +235,8 @@ public class MainActivity extends Activity {
     }
     private String friendly(Exception e) {
         if(e instanceof SecurityException) return e.getMessage();
-        if(e instanceof SocketTimeoutException) return "délai dépassé. Vérifiez le PC, le Wi-Fi et le pare-feu.";
-        if(e instanceof ConnectException) return "PC inaccessible. Démarrez son serveur et vérifiez l’adresse.";
+        if(e instanceof SocketTimeoutException) return "délai dépassé. Vérifiez le PC, le Wi-Fi ou Tailscale et le pare-feu.";
+        if(e instanceof ConnectException) return "PC inaccessible. Vérifiez le serveur, l’adresse et la connexion Tailscale si utilisée.";
         return e.getMessage()==null ? "échec réseau" : e.getMessage();
     }
     private TextView bubble(String who,String content) {
