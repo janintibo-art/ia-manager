@@ -504,13 +504,31 @@ class ConnectionsTab(QWidget):
 
     def download_hf(self):
         repo = self.hf_repo.text().strip()
-        if "/" not in repo:
-            self.add_status.setText("Indiquez le dépôt sous la forme utilisateur/depot.")
+        if repo.lower().startswith("ollama run "):
+            # Le bouton Copier de Hugging Face fournit une commande complète.
+            # Accepter ce collage sans transmettre « ollama run » à l'API Ollama.
+            parts = repo.split()
+            if len(parts) != 3:
+                self.add_status.setText("Collez une seule commande : ollama run hf.co/utilisateur/depot:Q4_K_M")
+                return
+            repo = parts[2]
+        quant = self.hf_quant.text().strip()
+        if ":" in repo.rsplit("/", 1)[-1]:
+            repo, pasted_quant = repo.rsplit(":", 1)
+            quant = pasted_quant
+        if any(c.isspace() for c in repo) or "/" not in repo or not repo.strip("/"):
+            self.add_status.setText("Indiquez utilisateur/depot ou collez la commande Ollama de Hugging Face.")
+            return
+        if not quant or (quant.replace("_", "").isalnum() and len(quant) < 32):
+            self.hf_repo.setText(repo)
+            self.hf_quant.setText(quant)
+        else:
+            self.add_status.setText("Quantification invalide : utilisez par exemple Q4_K_M ou Q6_K.")
             return
         if not self.ai_manager.is_ollama_running():
             self.add_status.setText("❌ Ollama doit être lancé.")
             return
-        name = pv.hf_model_name(repo, self.hf_quant.text())
+        name = pv.hf_model_name(repo, quant)
         self.set_busy(True, f"⏳ Téléchargement de {name}… (plusieurs minutes possible)")
         self.dl_worker = DownloadWorker(self.ai_manager, name)
         self.dl_worker.finished_ok.connect(lambda ok, err: self.on_added(ok, err, name))
