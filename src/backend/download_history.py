@@ -8,11 +8,14 @@ from threading import RLock
 
 from src.backend import storage
 
+ROOT = Path.home() / ".ia_manager" / "models"
+HISTORY = ROOT / "download_history.json"
+
 def _root():
-    return storage.app_models()
+    return storage.app_models() if storage.root() else ROOT
 
 def _history():
-    return _root() / "download_history.json"
+    return _root() / "download_history.json" if storage.root() else HISTORY
 _LOCK = RLock()
 
 
