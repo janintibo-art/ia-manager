@@ -5,7 +5,10 @@ on:
     paths: ['android/**', '.github/workflows/android.yml']
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   android:
     runs-on: ubuntu-latest
@@ -33,6 +36,35 @@ jobs:
         run: gradle --no-daemon :app:assembleDebug :app:lintDebug
       - uses: actions/upload-artifact@v4
         with:
-          name: ia_manager_android_v58
+          name: ia_manager_android
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      - name: Publish Android download
+        if: github.ref_name == github.event.repository.default_branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk ia_manager_android.apk
+          sha256sum ia_manager_android.apk > ia_manager_android.apk.sha256
+          cat > android-release-notes.md <<EOF
+          Application compagnon Android pour IA Manager.
+
+          Le PC exécute les modèles. Le téléphone et le PC doivent être sur le même réseau local.
+          Android 8.0 minimum. APK de test signé avec la clé de débogage mise en cache.
+          Si cette clé change, une réinstallation peut être nécessaire (historique local perdu).
+
+          Compilation : $GITHUB_RUN_NUMBER
+          Commit source : $GITHUB_SHA
+          Journal : https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+
+          Cette publication regroupe le dernier APK disponible. Le tag android-latest est un repère de téléchargement ; le commit source du binaire est indiqué ci-dessus.
+          EOF
+          if ! gh release view android-latest >/dev/null 2>&1; then
+            gh release create android-latest --target "$GITHUB_SHA" --title "IA Manager — Android (version de test)" --notes-file android-release-notes.md --prerelease --latest=false
+          fi
+          gh release upload android-latest ia_manager_android.apk ia_manager_android.apk.sha256 --clobber
+          gh release edit android-latest --title "IA Manager — Android (version de test)" --notes-file android-release-notes.md --prerelease --latest=false
+
