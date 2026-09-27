@@ -1,6 +1,6 @@
 """Installation isolée et lancement de l'interface officielle Obliteratus."""
 from pathlib import Path
-from PyQt6.QtCore import QProcess, QProcessEnvironment, QTimer, QUrl, Qt
+from PyQt6.QtCore import QProcess, QProcessEnvironment, QTimer, QUrl, Qt, pyqtSignal
 from PyQt6.QtGui import QDesktopServices, QTextCursor
 from PyQt6.QtWidgets import (
     QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit,
@@ -13,6 +13,8 @@ from src.backend import obliteratus_export as oe
 
 
 class ObliteratusTab(QWidget):
+    open_model_chat = pyqtSignal(str)
+
     def __init__(self):
         super().__init__()
         self.process = QProcess(self)
@@ -24,6 +26,7 @@ class ObliteratusTab(QWidget):
         self.queue = []
         self.mode = ""
         self.cancelled = False
+        self.chat_ready_name = ""
         self.active_port = 7860
         self.kill_timer = QTimer(self)
         self.kill_timer.setSingleShot(True)
@@ -162,6 +165,11 @@ class ObliteratusTab(QWidget):
         self.export_button.clicked.connect(self.export_checkpoint)
         export_row.addWidget(self.export_button)
         export_layout.addLayout(export_row)
+        self.chat_button = QPushButton("Discuter avec ce modèle dans Chat")
+        self.chat_button.setEnabled(False)
+        self.chat_button.clicked.connect(lambda: self.open_model_chat.emit(self.chat_ready_name))
+        self.export_name.textChanged.connect(self.update_buttons)
+        export_layout.addWidget(self.chat_button)
         root.addWidget(export_group)
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
@@ -207,6 +215,8 @@ class ObliteratusTab(QWidget):
         if index >= 0:
             self.checkpoints.setCurrentIndex(index)
             self.export_name.setText('obliteratus-' + self.library_table.item(row, 0).text()[-12:].lower())
+            self.chat_ready_name = ""
+            self.chat_button.setEnabled(False)
 
     def open_library_model(self):
         row = self.library_table.currentRow()
@@ -235,6 +245,8 @@ class ObliteratusTab(QWidget):
         if answer != QMessageBox.StandardButton.Yes:
             return
         try:
+            self.chat_ready_name = ""
+            self.chat_button.setEnabled(False)
             steps = oe.make_steps(self.checkpoints.currentData() or "", name, ob.environment_python())
             self.status.setText("Conversion puis import en cours · progression dans le journal.")
             self.run_steps(steps, "export")
@@ -257,6 +269,8 @@ class ObliteratusTab(QWidget):
                        self.library_refresh, self.library_table, self.library_open):
             widget.setEnabled(not busy)
         self.export_button.setEnabled(not busy and self.checkpoints.count() > 0 and ob.environment_python().is_file())
+        self.chat_button.setEnabled(not busy and bool(self.chat_ready_name)
+                                    and self.export_name.text().strip() == self.chat_ready_name)
 
     def run_steps(self, steps, mode):
         if self.mode:
@@ -389,7 +403,8 @@ class ObliteratusTab(QWidget):
         elif self.mode == "install":
             message = "Installation terminée. Vous pouvez lancer Obliteratus en local."
         elif self.mode == "export":
-            message = "Modèle ajouté à Ollama. Ouvrez Chat, cliquez sur 🔄, puis sélectionnez « " + self.export_name.text().strip() + " »."
+            message = "Modèle ajouté à Ollama. Cliquez sur « Discuter avec ce modèle dans Chat »."
+            self.chat_ready_name = self.export_name.text().strip()
         else:
             message = "Serveur local arrêté."
         self.queue.clear()

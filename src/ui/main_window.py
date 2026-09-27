@@ -97,6 +97,7 @@ class MainWindow(QMainWindow):
         self.search_tab.models_changed.connect(self.on_models_changed)
         self.dashboard_tab.models_changed.connect(self.on_models_changed)
         self.setup_tab.show_model.connect(self.open_model)
+        self.obliteratus_tab.open_model_chat.connect(self.open_obliteratus_chat)
 
         # Projets <-> Chat
         self.projects_tab.open_conversation.connect(self.open_conversation)
@@ -153,6 +154,14 @@ class MainWindow(QMainWindow):
     def open_model(self, model_id: str):
         self.models_tab.select_model(model_id)
         self.tabs.setCurrentWidget(self.models_tab)
+
+    def open_obliteratus_chat(self, name: str):
+        self.chat_tab.refresh_models()
+        if self.chat_tab.select_ref(name):
+            self.tabs.setCurrentWidget(self.chat_tab)
+        else:
+            self.obliteratus_tab.status.setText(
+                "Modèle « " + name + " » absent d'Ollama. Vérifiez que l'import est terminé et qu'Ollama est lancé.")
 
     def open_conversation(self, pid: str, cid: str):
         self.chat_tab.load_conversation(pid, cid)
