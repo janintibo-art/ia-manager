@@ -11,6 +11,7 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v4
@@ -26,17 +27,21 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: Smoke test (ouverture de tous les onglets)
+      - name: Unit tests and quick interface smoke test
+        timeout-minutes: 8
         env:
           QT_QPA_PLATFORM: offscreen
           PYTHONIOENCODING: utf-8
+          PYTHONUNBUFFERED: '1'
         run: |
           pip show PyQt6 PyQt6-Qt6
-          python -m unittest discover -s tests -p "test_*.py" -v
+          python -u -m unittest discover -s tests -p "test_*.py" -v
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python tests/smoke_test.py
+          python -u tests/build_smoke.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build EXE
+        timeout-minutes: 15
         run: pyinstaller --onefile --windowed --name ia_manager --hidden-import pkgutil --hidden-import anyio._backends._asyncio main.py
 
       - name: Upload artifact
