@@ -3,6 +3,7 @@ code copiable, téléchargement du code en zip."""
 
 import base64
 import html
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -31,6 +32,40 @@ from src.ui.workers import AttachmentWorker, FunctionWorker, StreamWorker
 
 NO_PROJECT = "(aucun projet — discussion libre)"
 MAX_IMAGE_SIDE = 1600
+MAX_FOLDER_FILES = 8
+MAX_FOLDER_BYTES = 24_000
+FOLDER_EXTENSIONS = {".py", ".js", ".ts", ".jsx", ".tsx", ".html", ".css", ".json",
+                     ".kt", ".java", ".cs", ".dart", ".sh", ".md", ".txt", ".yaml",
+                     ".yml", ".toml", ".xml", ".sql", ".csv", ".log"}
+IGNORED_FOLDERS = {".git", ".venv", "venv", "node_modules", "__pycache__", "build", "dist"}
+
+
+def folder_files(folder: str) -> List[str]:
+    """Choisit un échantillon textuel borné sans traverser les dépendances ni les liens."""
+    selected = []
+    total = 0
+    scanned = 0
+    for parent, dirs, files in os.walk(folder, followlinks=False):
+        dirs[:] = sorted(d for d in dirs if d not in IGNORED_FOLDERS and not d.startswith(".")
+                         and not (Path(parent) / d).is_symlink())
+        for name in sorted(files):
+            scanned += 1
+            if scanned > 3_000:
+                return selected
+            path = Path(parent) / name
+            if name.startswith(".") or path.is_symlink() or path.suffix.lower() not in FOLDER_EXTENSIONS:
+                continue
+            try:
+                size = path.stat().st_size
+            except OSError:
+                continue
+            if size > 12_000 or total + size > MAX_FOLDER_BYTES:
+                continue
+            selected.append(str(path))
+            total += size
+            if len(selected) >= MAX_FOLDER_FILES:
+                return selected
+    return selected
 
 
 def qimage_to_png(img: QImage) -> bytes:
@@ -286,6 +321,12 @@ class ChatTab(QWidget):
         attach_btn.setMinimumHeight(100)
         attach_btn.clicked.connect(self.choose_files)
         input_row.addWidget(attach_btn)
+        folder_btn = QPushButton("📁")
+        folder_btn.setToolTip("Joindre jusqu'à 8 fichiers texte/code d'un dossier (24 Ko au total). "
+                              "Les dépendances et dossiers cachés sont ignorés.")
+        folder_btn.setMinimumHeight(100)
+        folder_btn.clicked.connect(self.choose_folder)
+        input_row.addWidget(folder_btn)
         self.message_input = MessageInput(self.send_message, self.add_qimage, self.add_files)
         self.message_input.setFixedHeight(100)
         self.message_input.setPlaceholderText(
@@ -330,7 +371,20 @@ class ChatTab(QWidget):
             "Archives (*.zip)")
         self.add_files(files)
 
-    def add_files(self, paths: List[str]):
+    def choose_folder(self):
+        if self.attachment_worker is not None:
+            self.status.setText("Attendez la fin du chargement en cours avant d'ajouter un dossier.")
+            return
+        folder = QFileDialog.getExistingDirectory(self, "Joindre un dossier de travail", str(Path.home()))
+        if not folder:
+            return
+        paths = folder_files(folder)
+        if not paths:
+            self.status.setText("Aucun fichier texte/code assez petit dans ce dossier.")
+            return
+        self.add_files(paths, folder_root=folder)
+
+    def add_files(self, paths: List[str], folder_root: Optional[str] = None):
         paths = [p for p in paths if p and not Path(p).is_dir()]
         if not paths:
             return
@@ -339,7 +393,12 @@ class ChatTab(QWidget):
             return
         self.attachment_gen += 1
         generation = self.attachment_gen
-        worker = AttachmentWorker(paths, load_chat_file)
+        def load(path):
+            attachment = load_chat_file(path)
+            if folder_root:
+                attachment["name"] = Path(path).relative_to(folder_root).as_posix()
+            return attachment
+        worker = AttachmentWorker(paths, load)
         self.attachment_worker = worker
         self.attachment_loading = True
         worker.finished.connect(lambda: self.attachment_finished(worker))
@@ -970,6 +1029,16 @@ class ChatTab(QWidget):
             return
         if not text and not self.pending:
             return
+        if any(a["kind"] == "image" for a in self.pending) and not att.model_accepts_images(ref):
+            warning = QMessageBox(self)
+            warning.setWindowTitle("Images et modèle choisi")
+            warning.setText("Cette IA n'est pas reconnue comme compatible avec les images. "
+                            "Choisissez un modèle Images ou Documents et OCR pour lire la pièce jointe.")
+            warning.setInformativeText("Vous pouvez quand même tenter l'envoi si votre modèle accepte les images.")
+            warning.setStandardButtons(QMessageBox.StandardButton.Cancel | QMessageBox.StandardButton.Ok)
+            warning.setDefaultButton(QMessageBox.StandardButton.Cancel)
+            if warning.exec() != QMessageBox.StandardButton.Ok:
+                return
         if self.estimate_context() >= 8192 and len(self.messages) >= 8:
             self.status.setText("⚠️ Historique volumineux : utilisez « Réduire l’historique » avant d’envoyer.")
             return
