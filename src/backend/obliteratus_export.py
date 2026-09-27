@@ -3,7 +3,7 @@ import json
 import os
 import re
 import shutil
-import time
+from uuid import uuid4
 from pathlib import Path
 
 def model_library(root=None, export_root=None):
@@ -94,7 +94,7 @@ def make_steps(checkpoint, name, python, root=None, ollama=None):
     converter_python = venv / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
     source = root / 'llama.cpp-master'
     # Une sortie distincte préserve les conversions précédentes, même en cas d'échec.
-    output = root / 'exports' / (name + '-' + str(time.time_ns()))
+    output = root / 'exports' / (name + '-' + uuid4().hex)
     output.mkdir(parents=True, exist_ok=False)
     gguf = output / 'model.gguf'
     modelfile = output / 'Modelfile'
