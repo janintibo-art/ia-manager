@@ -35,6 +35,7 @@ class CommandRunner(QObject):
         self._buffer = ""
         self._auth_prompted = False
         self._auth_text = ""
+        self._auth_code = ""
 
     def busy(self) -> bool:
         return self.proc is not None and self.proc.state() != QProcess.ProcessState.NotRunning
@@ -77,6 +78,7 @@ class CommandRunner(QObject):
         self._buffer = ""
         self._auth_prompted = False
         self._auth_text = ""
+        self._auth_code = ""
         self._auth = bool(step.get("auth"))
 
         proc = QProcess(self)
@@ -109,12 +111,18 @@ class CommandRunner(QObject):
             self._auth_text = (self._auth_text + data)[-2500:]
             # GitHub CLI attend Entrée avant de commencer à vérifier le code.
             # Lancer le navigateur via Qt et conserver le code dans le journal.
-            if not self._auth_prompted and re.search(r"[A-Z0-9]{4}-[A-Z0-9]{4}", self._auth_text):
+            code = re.search(r"\b[A-Z0-9]{4}-[A-Z0-9]{4}\b", self._auth_text)
+            if not self._auth_prompted and code:
                 self._auth_prompted = True
-                self.output.emit("\n🔑 Saisissez ce code sur https://github.com/login/device. "
-                                 "La vérification reste active dans IA Manager.\n")
-                QDesktopServices.openUrl(QUrl("https://github.com/login/device"))
+                self._auth_code = code.group(0)
+                QApplication.clipboard().setText(self._auth_code)
+                self.output.emit("\n🔑 CODE GITHUB : " + self._auth_code +
+                                 " (copié : collez-le dans la page GitHub avec Ctrl+V).\n")
                 self.proc.write(b"\n")
+                QMessageBox.information(None, "Code de connexion GitHub",
+                                        "Votre code : " + self._auth_code + "\n\n"
+                                        "Il est copié. Sur la page GitHub ouverte, faites Ctrl+V puis Continuer.")
+                QDesktopServices.openUrl(QUrl("https://github.com/login/device"))
         if self._capture:
             self._buffer += data
         else:
@@ -539,11 +547,12 @@ class GithubTab(QWidget):
         if self.runner.busy():
             self.append_output("\n⏳ Une commande est déjà en cours.\n")
             return
-        self.append_output("\n🔑 Connexion GitHub : le code va apparaître ci-dessous. "
-                           "Si le navigateur ne s'ouvre pas, utilisez « Page de connexion ».\n")
+        self.append_output("\n🔑 Connexion GitHub : le code sera copié et affiché dans une fenêtre. "
+                           "Sur GitHub, faites Ctrl+V.\n")
         self.runner.run([
             {"program": "gh", "args": ["auth", "login", "--hostname", "github.com",
-                                        "--git-protocol", "https", "--web", "--skip-ssh-key"], "auth": True},
+                                        "--git-protocol", "https", "--web", "--clipboard",
+                                        "--skip-ssh-key"], "auth": True},
             {"program": "gh", "args": ["auth", "setup-git"]},
             {"program": "gh", "args": ["auth", "status"]},
         ])
