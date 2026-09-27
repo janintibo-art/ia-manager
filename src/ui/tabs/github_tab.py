@@ -511,15 +511,28 @@ class GithubTab(QWidget):
         self.runner.run([{"program": "winget", "args": ["install", "--id", "GitHub.cli", "--exact", "--source", "winget"]}])
 
     def login(self):
-        if not gt.tool_status()["gh"]:
+        gh = gt.tool_status()["gh"]
+        if not gh:
             QMessageBox.information(self, "GitHub CLI manquant",
                                     "Installez d'abord GitHub CLI (bouton « Installer GitHub CLI »).")
             return
         if gt.is_windows():
-            gh = gt.tool_status()["gh"]
-            QProcess.startDetached("cmd", ["/k", f'"{gh}" auth login && "{gh}" auth setup-git'])
-            self.append_output("\n🔑 Une fenêtre s'est ouverte : suivez les instructions pour vous "
-                               "connecter, puis cliquez sur 🔄.\n")
+            # WinGet peut avoir installé gh après le lancement de l'application.
+            # Son dossier n'est alors pas encore dans PATH : appeler le chemin
+            # absolu via PowerShell évite l'erreur « gh n'est pas reconnu ».
+            quoted = gh.replace("'", "''")
+            command = (f"& '{quoted}' auth login --web; "
+                       f"if ($LASTEXITCODE -eq 0) {{ & '{quoted}' auth setup-git }}")
+            launched = QProcess.startDetached(
+                "powershell.exe", ["-NoProfile", "-NoExit", "-Command", command])
+            if isinstance(launched, tuple):
+                launched = launched[0]
+            if launched:
+                self.append_output("\n🔑 Une fenêtre PowerShell s'est ouverte. "
+                                   "Suivez la connexion dans le navigateur, revenez ici et cliquez sur 🔄.\n")
+            else:
+                self.append_output("\n❌ PowerShell ne s'est pas ouvert. "
+                                   "Relancez IA Manager, puis réessayez.\n")
         else:
             self.append_output("\n🔑 Ouvrez un terminal et tapez : gh auth login && gh auth setup-git\n")
 
@@ -585,6 +598,16 @@ class GithubTab(QWidget):
     def run_free_command(self):
         command = self.cmd_edit.text().strip()
         if not command:
+            return
+        # L'authentification demande une console interactive et ne peut pas
+        # fonctionner dans le terminal intégré (GH_PROMPT_DISABLED=1).
+        if re.fullmatch(r'(?:cmd\s+/c\s+["\']?)?gh\s+auth\s+login["\']?', command, re.I):
+            self.login()
+            self.cmd_edit.clear()
+            return
+        if re.fullmatch(r'gh\s+auth\s+status', command, re.I):
+            if self.runner.run(gt.pc_steps("auth_status")):
+                self.cmd_edit.clear()
             return
         program, args = gt.shell_command(command)
         if self.runner.run([{"program": program, "args": args}], self.folder_edit.text().strip()):
