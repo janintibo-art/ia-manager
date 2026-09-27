@@ -52,6 +52,14 @@ CATEGORIES: Dict[str, Dict[str, str]] = {
                 "Qwen 2.5 14B pour des récits plus détaillés. Dans le Chat, essayez : "
                 "« Imagine une quête fantasy avec un choix difficile et trois issues ».",
     },
+    "documents": {
+        "label": "📄 Documents et OCR",
+        "desc": "Pour lire une facture, un tableau ou une page scannée : choisissez un modèle ici, "
+                "ouvrez le Chat et joignez une image PNG/JPG de la page avec 📎. "
+                "Demandez par exemple : « Transcris le texte puis résume les points importants ». "
+                "Les PDF contenant du texte sélectionnable sont lus directement ; pour les PDF scannés, "
+                "joignez une image de chaque page à lire.",
+    },
 }
 
 # size_gb : taille du téléchargement ≈ mémoire occupée par le modèle.
@@ -396,11 +404,11 @@ MODELS += [
        "Le modèle de vision le plus puissant de la famille Qwen dans cette taille.",
        ["Excellente compréhension d'image", "Bon français", "Très long contexte"],
        ["8 Go de VRAM conseillés"], "Meilleur choix vision pour une carte de 8 Go.", discovery=False),
-    _m("granite3.2-vision:2b", "Granite 3.2 Vision 2B", "vision", "IBM", "2 milliards", 2.4, 3, 1, "16k",
+    _m("granite3.2-vision:2b", "Granite 3.2 Vision 2B", "documents", "IBM", "2 milliards", 2.4, 3, 1, "16k",
        "Petit modèle d'IBM spécialisé dans les documents : tableaux, graphiques, formulaires.",
        ["Très bon sur les documents", "Léger"],
        ["Peu doué pour les photos"], "Lire des tableaux et graphiques."),
-    _m("glm-ocr:latest", "GLM-OCR", "vision", "Zhipu AI", "moins d'1 milliard", 2.2, 4, 2, "8k",
+    _m("glm-ocr:latest", "GLM-OCR", "documents", "Zhipu AI", "moins d'1 milliard", 2.2, 4, 2, "128k",
        "Modèle dédié à la reconnaissance de texte (OCR) dans des documents complexes.",
        ["Excellent OCR", "Mises en page complexes"],
        ["Ne fait que de l'OCR"], "Numériser factures, courriers, documents scannés."),
@@ -497,7 +505,7 @@ EXTRA_MODELS = [
     _m("codellama:70b", "Code Llama 70b", "code", "Meta", "70b", 39, 5, 2, "2k", "Modèle local pour écrire ou expliquer du code ; à choisir selon la taille du projet. Fichier Ollama d'environ 39 Go.", ["Aide à la programmation"], ["Demande beaucoup de mémoire"], "Station de travail avec beaucoup de mémoire"),
     _m("granite4:1b", "granite4 1b", "chat", "IBM", "1b", 3.3, 3, 2, "128k", "Assistant de conversation local pour discuter, rédiger et résumer des textes. Fichier Ollama d'environ 3.3 Go.", ["Fonctionne en local"], ["Qualité et vitesse selon le matériel"], "PC courant"),
     _m("granite4:3b", "granite4 3b", "chat", "IBM", "3b", 2.1, 3, 2, "128k", "Assistant de conversation local pour discuter, rédiger et résumer des textes. Fichier Ollama d'environ 2.1 Go.", ["Fonctionne en local"], ["Qualité et vitesse selon le matériel"], "PC courant"),
-    _m("qwen3-vl:2b", "Qwen 3 VL 2b", "vision", "Alibaba", "2b", 1.9, 2, 3, "256k", "Modèle multimodal pour analyser les images dans les interfaces compatibles. Fichier Ollama d'environ 1.9 Go.", ["Analyse d'images"], ["Qualité et vitesse selon le matériel"], "PC courant"),
+    _m("qwen3-vl:2b", "Qwen 3 VL 2B · lecture légère", "documents", "Alibaba", "2b", 1.9, 2, 3, "256k", "Petit modèle multimodal pour lire des captures et des documents photographiés. Environ 1,9 Go.", ["Léger", "Comprend le français"], ["Vérifiez toujours les nombres et noms extraits"], "PC courant"),
     _m("qwen3-vl:30b", "Qwen 3 VL 30b", "vision", "Alibaba", "30b", 20, 5, 3, "256k", "Modèle multimodal pour analyser les images dans les interfaces compatibles. Fichier Ollama d'environ 20 Go.", ["Analyse d'images"], ["Demande beaucoup de mémoire"], "Station de travail avec beaucoup de mémoire"),
     _m("qwen3-vl:32b", "Qwen 3 VL 32b", "vision", "Alibaba", "32b", 21, 5, 3, "256k", "Modèle multimodal pour analyser les images dans les interfaces compatibles. Fichier Ollama d'environ 21 Go.", ["Analyse d'images"], ["Demande beaucoup de mémoire"], "Station de travail avec beaucoup de mémoire"),
     _m("llava:13b", "llava 13b", "vision", "LLaVA", "13b", 8, 4, 2, "4k", "Modèle multimodal pour analyser les images dans les interfaces compatibles. Fichier Ollama d'environ 8 Go.", ["Analyse d'images"], ["Qualité et vitesse selon le matériel"], "PC doté de 16 à 32 Go de RAM"),
@@ -643,11 +651,20 @@ CREATIVE_MODELS = [
        ["Univers et scénarios complexes"], ["Exige beaucoup de mémoire, surtout avec un long contexte"], "Station de travail"),
 ]
 MODELS += CREATIVE_MODELS
+DOCUMENT_MODELS = [
+    _m("glm-ocr:q8_0", "GLM-OCR · précision", "documents", "Zhipu AI", "moins d'1 milliard", 1.6, 4, 2, "128k",
+       "Variante Q8 de GLM-OCR pour extraire le texte de documents photographiés. Environ 1,6 Go.",
+       ["Lecture de texte et de mises en page"], ["Spécialisé OCR : peu adapté à une discussion"], "PC courant"),
+    _m("deepseek-ocr:3b", "DeepSeek OCR 3B", "documents", "DeepSeek", "3b", 6.7, 4, 2, "8k",
+       "Modèle de lecture de documents et d'images. Environ 6,7 Go ; demande Ollama 0.13 ou plus récent.",
+       ["Extraction de texte"], ["Vérifiez la version d'Ollama avant le téléchargement"], "PC doté de 16 Go de RAM"),
+]
+MODELS += DOCUMENT_MODELS
 # Modèles à usage unique : visibles dans le catalogue mais jamais « conseillés »
 NICHE_IDS = {"glm-ocr:latest", "starcoder2:7b", "nuextract:3.8b", "reader-lm:1.5b",
              "sqlcoder:7b", "sailor2:8b", "medgemma:4b"}
 # Catégories présentes dans le tableau de recommandations
-RECO_CATEGORIES = [c for c in CATEGORIES if c not in ("special", "uncensored", "creative")]
+RECO_CATEGORIES = [c for c in CATEGORIES if c not in ("special", "uncensored", "creative", "documents")]
 
 FIT_LABELS = {
     "gpu": ("✅", "Rapide", "Tient entièrement dans la carte graphique"),

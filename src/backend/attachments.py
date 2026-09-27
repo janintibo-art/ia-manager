@@ -20,7 +20,7 @@ BINARY_EXT = {".exe", ".dll", ".so", ".bin", ".gguf", ".mp3", ".mp4", ".avi", ".
 # Modèles qui acceptent les images (préfixes de noms Ollama ou distants)
 VISION_HINTS = ("llava", "bakllava", "moondream", "minicpm-v", "llama3.2-vision", "qwen2.5vl",
                 "qwen3-vl", "granite3.2-vision", "gemma3:", "gemma3n", "medgemma", "glm-ocr",
-                "mistral-small3", "llama4", "claude", "gpt-4o", "gpt-4.1", "gpt-5", "o3", "o4")
+                "deepseek-ocr", "mistral-small3", "llama4", "claude", "gpt-4o", "gpt-4.1", "gpt-5", "o3", "o4")
 
 
 def model_accepts_images(model_ref: str) -> bool:
