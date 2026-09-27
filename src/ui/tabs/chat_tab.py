@@ -195,6 +195,33 @@ class ChatTab(QWidget):
         selectors.addWidget(settings_btn)
         root.addLayout(selectors)
 
+        tools_row = QHBoxLayout()
+        tasks_btn = QPushButton("✨ Tâches")
+        tasks_btn.setToolTip("Préparer une demande pour écrire, expliquer, résumer ou organiser une idée")
+        tasks_menu = QMenu(tasks_btn)
+        for label, prompt in (
+            ("✍️ Rédiger ou améliorer", "Améliore ce texte en conservant mes idées et mon ton. Explique brièvement les changements :"),
+            ("📌 Résumer", "Résume les points importants, puis indique les décisions et les actions à retenir :"),
+            ("🌍 Traduire", "Traduis ce texte en français naturel, en conservant le sens et la mise en forme :"),
+            ("💡 Chercher des idées", "Propose plusieurs idées concrètes et différentes pour ce projet, avec leurs avantages :"),
+            ("🧩 Expliquer simplement", "Explique ce sujet étape par étape avec un exemple clair :"),
+            ("📎 Analyser une pièce jointe", "Analyse le fichier joint. Donne d'abord un résumé, puis les points à vérifier et des pistes d'amélioration :"),
+        ):
+            action = tasks_menu.addAction(label)
+            action.triggered.connect(lambda _checked=False, p=prompt: self.prepare_task(p))
+        tasks_btn.setMenu(tasks_menu)
+        tools_row.addWidget(tasks_btn)
+        reuse_btn = QPushButton("↶ Reprendre ma demande")
+        reuse_btn.setToolTip("Replace votre dernière question dans le champ de saisie pour la modifier")
+        reuse_btn.clicked.connect(self.reuse_last_request)
+        tools_row.addWidget(reuse_btn)
+        export_btn = QPushButton("💾 Exporter la discussion")
+        export_btn.setToolTip("Enregistrer le texte de la discussion dans un fichier Markdown sur ce PC")
+        export_btn.clicked.connect(self.export_markdown)
+        tools_row.addWidget(export_btn)
+        tools_row.addStretch()
+        root.addLayout(tools_row)
+
         self.profile_instructions = ""
         self.profile_label = QLabel("Profil : aucun")
         root.addWidget(self.profile_label)
@@ -587,6 +614,13 @@ class ChatTab(QWidget):
             self.append_html(self.bubble_html("Vous", body, style.SURFACE_2, style.ACCENT_HOVER))
         else:
             body = code_tools.markdown_to_html(m["content"], index, style.code_colors())
+            if m.get("web_sources"):
+                links = " · ".join(
+                    f"<a href='{html.escape(s['url'], quote=True)}'>"
+                    f"{html.escape(s.get('title') or s['url'])}</a>"
+                    for s in m["web_sources"][:5] if s.get("url", "").startswith(("https://", "http://")))
+                if links:
+                    body += f"<br>🌐 Sources : {links}"
             who = f"IA · {providers.label_for(model_ref)[2:].strip()}" if model_ref else "IA"
             self.append_html(self.bubble_html(who, body, style.SURFACE, style.GREEN))
 
@@ -852,6 +886,61 @@ class ChatTab(QWidget):
         self.message_input.moveCursor(QTextCursor.MoveOperation.End)
         self.message_input.setFocus()
 
+    def prepare_task(self, prompt: str):
+        draft = self.message_input.toPlainText().strip()
+        self.message_input.setPlainText(f"{prompt}\n\n{draft}" if draft else f"{prompt}\n\n")
+        self.message_input.moveCursor(QTextCursor.MoveOperation.End)
+        self.message_input.setFocus()
+
+    def reuse_last_request(self):
+        last = next((m for m in reversed(self.messages) if m.get("role") == "user"), None)
+        if not last:
+            self.status.setText("Aucune demande précédente à reprendre.")
+            return
+        if self.message_input.toPlainText().strip():
+            answer = QMessageBox.question(self, "Reprendre la demande",
+                                          "Remplacer le brouillon actuellement saisi ?")
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+        text = last.get("display") or last.get("content", "").split("\n\n--- Fichier joint :", 1)[0]
+        self.message_input.setPlainText(text)
+        self.message_input.moveCursor(QTextCursor.MoveOperation.End)
+        self.message_input.setFocus()
+        if last.get("attachments"):
+            self.status.setText("Demande reprise. Ajoutez à nouveau les pièces jointes avant d'envoyer.")
+        else:
+            self.status.setText("Demande reprise : modifiez-la, puis envoyez-la.")
+
+    def export_markdown(self):
+        if not self.messages:
+            self.status.setText("La discussion est vide : rien à exporter.")
+            return
+        path, _ = QFileDialog.getSaveFileName(self, "Exporter la discussion",
+                                              str(self.save_folder() / "discussion.md"),
+                                              "Markdown (*.md)")
+        if not path:
+            return
+        try:
+            sections = ["# Discussion IA Manager", ""]
+            for message in self.messages:
+                sections.append("## Vous" if message.get("role") == "user" else "## IA")
+                sections.extend(("", message.get("content", ""), ""))
+                if message.get("images"):
+                    sections.append("_[Image(s) jointe(s) non incluses dans cet export texte.]_")
+                    sections.append("")
+                if message.get("web_sources"):
+                    sections.append("Sources consultées :")
+                    for source in message["web_sources"][:5]:
+                        url = source.get("url", "")
+                        if url.startswith(("https://", "http://")):
+                            sections.append(f"- {source.get('title') or url} — {url}")
+                    sections.append("")
+            Path(path).write_text("\n".join(sections), encoding="utf-8")
+        except OSError as error:
+            self.status.setText(f"Export impossible : {error}")
+            return
+        self.status.setText(f"Discussion exportée : {path}")
+
     def manage_commands(self):
         QuickCommandsDialog(self).exec()
 
@@ -1021,14 +1110,13 @@ class ChatTab(QWidget):
             text += "\n\n**Passages transmis à l’IA :**\n" + "\n".join(
                 f"- [D{i}] {r['name']} — passage {r['passage']}" for i, r in enumerate(self.memory_sources, 1))
             self.memory_sources = []
-        self.messages.append({"role": "assistant", "content": text})
+        answer = {"role": "assistant", "content": text}
+        if self.web_sources:
+            answer["web_sources"] = self.web_sources[:5]
+        self.messages.append(answer)
         self.estimate_context()
         self.render_message(len(self.messages) - 1, ref)
-        if self.web_sources:
-            links = " · ".join(f"<a href='{html.escape(s['url'])}'>{html.escape(s['title'] or s['url'])}</a>"
-                               for s in self.web_sources[:5])
-            self.system_message(f"🌐 Sources : {links}")
-            self.web_sources = []
+        self.web_sources = []
         self.status.setText(self.stats_text(stats))
         try:
             self.save_current(ref)
