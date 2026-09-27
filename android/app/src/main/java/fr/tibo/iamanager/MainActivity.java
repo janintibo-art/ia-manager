@@ -26,7 +26,7 @@ public class MainActivity extends Activity {
     private final Handler ui = new Handler(Looper.getMainLooper());
     private final ExecutorService network = Executors.newSingleThreadExecutor();
     private EditText address, code, prompt;
-    private Button connect, send, stop, reset, configure;
+    private Button connect, send, stop, reset, configure, reconnect;
     private LinearLayout connectionPanel;
     private Spinner models;
     private TextView status, reply;
@@ -66,6 +66,10 @@ public class MainActivity extends Activity {
             connectionPanel.setVisibility(View.VISIBLE); configure.setVisibility(View.GONE);
             connected=false; controls();
         });
+        reconnect = button("↻ Reconnecter au PC");
+        reconnect.setVisibility(View.GONE);
+        root.addView(reconnect);
+        reconnect.setOnClickListener(v -> connect());
         address = input("Adresse du PC : http://192.168.1.20:8765", false);
         address.setSingleLine(true);
         address.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
@@ -125,6 +129,8 @@ public class MainActivity extends Activity {
     private void post(Runnable r) { ui.post(() -> { if (!destroyed) r.run(); }); }
     private void controls() {
         configure.setEnabled(!busy); connect.setEnabled(!busy); address.setEnabled(!busy); code.setEnabled(!busy);
+        reconnect.setVisibility(connected ? View.VISIBLE : View.GONE);
+        reconnect.setEnabled(!busy);
         models.setEnabled(!busy && connected); send.setEnabled(!busy && connected && !refs.isEmpty());
         stop.setEnabled(busy && !requestId.isEmpty()); reset.setEnabled(!busy);
     }
@@ -173,6 +179,8 @@ public class MainActivity extends Activity {
     private void check(HttpURLConnection c) throws Exception {
         int response=c.getResponseCode();
         if (response!=200) {
+            if(response==401 || response==403)
+                throw new SecurityException("Code d'accès refusé. Vérifiez le nouveau code dans l'onglet Téléphone du PC.");
             String error=read(c.getErrorStream());
             try { error=new JSONObject(error).optString("error",error); } catch(JSONException ignored) {}
             if(error.isEmpty()) error="Connexion refusée (HTTP "+response+").";
@@ -186,6 +194,8 @@ public class MainActivity extends Activity {
         } catch(Exception e) { status.setText(e.getMessage()); return; }
         connected=false; busy=true; controls(); status.setText("Connexion au PC…");
         final String endpoint=base, token=secret;
+        final String previousRef = models.getSelectedItemPosition() >= 0 && models.getSelectedItemPosition() < refs.size()
+            ? refs.get(models.getSelectedItemPosition()) : "";
         network.execute(() -> {
             HttpURLConnection c=null;
             try {
@@ -199,6 +209,8 @@ public class MainActivity extends Activity {
                     refs.clear(); refs.addAll(ids);
                     ArrayAdapter<String> adapter=new ArrayAdapter<>(this,android.R.layout.simple_spinner_item,names);
                     adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item); models.setAdapter(adapter);
+                    int restored=refs.indexOf(previousRef);
+                    if(restored>=0) models.setSelection(restored);
                     connected=true; busy=false; controls();
                     connectionPanel.setVisibility(View.GONE); configure.setVisibility(View.VISIBLE);
                     android.view.inputmethod.InputMethodManager keyboard=(android.view.inputmethod.InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
@@ -206,11 +218,14 @@ public class MainActivity extends Activity {
                     status.setText((ids.isEmpty()?"PC connecté, mais aucun modèle disponible. Lancez Ollama sur le PC.":"Connecté · "+ids.size()+" modèle(s)")+(warnings.isEmpty()?"":"\n"+warnings));
                     getPreferences(MODE_PRIVATE).edit().putString("address",endpoint).apply();
                 });
-            } catch(Exception e) { post(() -> { busy=false; connected=false; status.setText("Connexion impossible : "+friendly(e)); controls(); }); }
+            } catch(Exception e) { post(() -> { busy=false; connected=false;
+                connectionPanel.setVisibility(View.VISIBLE); configure.setVisibility(View.GONE);
+                status.setText("Connexion impossible : "+friendly(e)); controls(); }); }
             finally { if(c!=null)c.disconnect(); activeConnection=null; }
         });
     }
     private String friendly(Exception e) {
+        if(e instanceof SecurityException) return e.getMessage();
         if(e instanceof SocketTimeoutException) return "délai dépassé. Vérifiez le PC, le Wi-Fi et le pare-feu.";
         if(e instanceof ConnectException) return "PC inaccessible. Démarrez son serveur et vérifiez l’adresse.";
         return e.getMessage()==null ? "échec réseau" : e.getMessage();
@@ -275,6 +290,9 @@ public class MainActivity extends Activity {
             } catch(Exception e) {
                 String partial=answer.toString();
                 post(() -> { currentReply.setText("IA\n"+(partial.isEmpty()?"Pas de réponse reçue.":partial)); prompt.setText(question);
+                    if(e instanceof SecurityException || e instanceof ConnectException || e instanceof SocketTimeoutException) {
+                        connected=false; connectionPanel.setVisibility(View.VISIBLE); configure.setVisibility(View.GONE);
+                    }
                     status.setText(cancelled?"Génération arrêtée · vous pouvez réessayer.":friendly(e)); });
             } finally {
                 if(c!=null)c.disconnect(); activeConnection=null;
