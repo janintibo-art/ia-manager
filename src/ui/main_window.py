@@ -85,6 +85,7 @@ class MainWindow(QMainWindow):
 
         # Modèles installés ou supprimés : tous les onglets se mettent à jour
         self.setup_tab.models_changed.connect(self.on_models_changed)
+        self.setup_tab.open_section.connect(self.open_named_tab)
         self.models_tab.models_changed.connect(self.on_models_changed)
         self.connections_tab.models_changed.connect(self.on_models_changed)
         self.connections_tab.providers_changed.connect(self.on_models_changed)
@@ -131,7 +132,8 @@ class MainWindow(QMainWindow):
 
     def open_named_tab(self, name: str):
         tabs = {"search": self.search_tab, "connections": self.connections_tab,
-                "chat": self.chat_tab, "workspace": self.workspace_tab}
+                "chat": self.chat_tab, "workspace": self.workspace_tab,
+                "github": self.github_tab}
         target = tabs.get(name)
         if target is not None:
             self.tabs.setCurrentWidget(target)

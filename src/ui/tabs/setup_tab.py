@@ -1,8 +1,10 @@
 """Onglet Analyse - analyse du PC, répartition VRAM/RAM, modèles conseillés"""
 
 from typing import Dict, List, Optional
+import shutil
 
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal
+from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
     QAbstractItemView, QButtonGroup, QFrame, QGridLayout, QHBoxLayout,
     QHeaderView, QLabel, QMessageBox, QProgressBar, QPushButton, QRadioButton,
@@ -11,6 +13,7 @@ from PyQt6.QtWidgets import (
 
 from src.backend import model_registry as reg
 from src.backend import settings
+from src.backend import github_tools
 from src.backend.model_options import PRIORITY_TO_MODE
 from src.backend.ai_manager import AIManager
 from src.backend.allocation import AllocationCalculator
@@ -55,6 +58,7 @@ class SetupTab(QWidget):
     analysis_done = pyqtSignal(dict)
     models_changed = pyqtSignal()
     show_model = pyqtSignal(str)
+    open_section = pyqtSignal(str)
 
     def __init__(self):
         super().__init__()
@@ -98,6 +102,26 @@ class SetupTab(QWidget):
         self.analyze_btn.clicked.connect(self.analyze_system)
         head.addWidget(self.analyze_btn, 0, Qt.AlignmentFlag.AlignTop)
         root.addLayout(head)
+
+        quick = QFrame()
+        quick.setObjectName("Card")
+        quick_lay = QVBoxLayout(quick)
+        quick_title = QLabel("🚀  Bien démarrer")
+        quick_title.setObjectName("CardTitle")
+        quick_lay.addWidget(quick_title)
+        self.quick_status = QLabel("Vérification de votre installation…")
+        self.quick_status.setWordWrap(True)
+        quick_lay.addWidget(self.quick_status)
+        quick_buttons = QHBoxLayout()
+        self.quick_next = QPushButton("Étape suivante")
+        self.quick_next.clicked.connect(self.open_next_step)
+        quick_buttons.addWidget(self.quick_next)
+        self.quick_github = QPushButton("Configurer GitHub")
+        self.quick_github.clicked.connect(lambda: self.open_section.emit("github"))
+        quick_buttons.addWidget(self.quick_github)
+        quick_buttons.addStretch()
+        quick_lay.addLayout(quick_buttons)
+        root.addWidget(quick)
 
         # Cartes matériel
         grid = QGridLayout()
@@ -221,6 +245,7 @@ class SetupTab(QWidget):
 
     def refresh_installed(self):
         self.installed = self.ai_manager.get_available_models()
+        self.update_quick_start()
         self.update_recommendations()
 
     def analyze_system(self):
@@ -248,8 +273,29 @@ class SetupTab(QWidget):
         self.verdict.setText("  ·  ".join(self.analyzer.get_recommendations(info)))
 
         self.installed = self.ai_manager.get_available_models()
+        self.update_quick_start()
         self.update_all()
         self.analysis_done.emit(info)
+
+    def update_quick_start(self):
+        ollama = bool(shutil.which("ollama"))
+        available = bool(self.installed)
+        github = bool(github_tools.tool_status()["gh"])
+        lines = ["Ollama : " + ("✅ installé" if ollama else "⚪ à installer pour les IA locales"),
+                 "Modèles : " + ("✅ disponibles" if available else "⚪ aucun modèle local détecté"),
+                 "GitHub CLI : " + ("✅ installé" if github else "⚪ à installer pour piloter GitHub depuis le PC")]
+        self.quick_status.setText("\n".join(lines))
+        self._quick_action = "install" if not ollama and not available else "search" if not available else "chat"
+        self.quick_next.setText({"install": "Installer Ollama", "search": "Choisir un modèle",
+                                 "chat": "Ouvrir le chat"}[self._quick_action])
+        self.quick_github.setVisible(not github)
+
+    def open_next_step(self):
+        action = getattr(self, "_quick_action", "install")
+        if action == "install":
+            QDesktopServices.openUrl(QUrl("https://ollama.com/download/windows"))
+        else:
+            self.open_section.emit(action)
 
     def update_all(self):
         idx = max(0, self.prio_group.checkedId())
