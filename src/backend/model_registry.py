@@ -37,6 +37,11 @@ CATEGORIES: Dict[str, Dict[str, str]] = {
         "desc": "Modèles entraînés pour un seul métier : maths, bases de données SQL, médecine, "
                 "extraction d'informations, conversion de pages web.",
     },
+    "uncensored": {
+        "label": "🔓 IA moins filtrées",
+        "desc": "Modèles décrits par leurs auteurs comme moins filtrés ou « uncensored ». "
+                "Leurs réponses varient selon le modèle et ses réglages ; aucune absence totale de refus n'est garantie.",
+    },
 }
 
 # size_gb : taille du téléchargement ≈ mémoire occupée par le modèle.
@@ -556,11 +561,35 @@ EXTRA_MODELS = [
 ]
 MODELS += EXTRA_MODELS
 EXTRA_IDS = {model["id"] for model in EXTRA_MODELS}
+UNCENSORED_MODELS = [
+    _m("dolphin-phi:2.7b", "Dolphin Phi 2.7B", "uncensored", "Eric Hartford", "2.7b", 1.6, 2, 1, "2k",
+       "Petit modèle Dolphin présenté comme non censuré. Contexte court ; environ 1,6 Go à télécharger.",
+       ["Léger pour commencer"], ["Ancien modèle ; réponses et français variables"], "PC modeste"),
+    _m("wizard-vicuna-uncensored:7b", "Wizard Vicuna Uncensored 7B", "uncensored", "Eric Hartford", "7b", 3.8, 2, 1, "2k",
+       "Variante de Wizard Vicuna entraînée avec moins de réponses moralisatrices. Environ 3,8 Go.",
+       ["Taille accessible"], ["Contexte limité à 2k ; ancien modèle"], "PC courant"),
+    _m("dolphin-mistral:7b", "Dolphin Mistral 7B", "uncensored", "Eric Hartford", "7b", 4.1, 3, 2, "32k",
+       "Version Dolphin de Mistral présentée comme non censurée, adaptée à la discussion et au code. Environ 4,1 Go.",
+       ["Polyvalent", "Aide au code"], ["Qualité du français variable"], "PC courant"),
+    _m("dolphin-llama3:8b", "Dolphin Llama 3 8B", "uncensored", "Eric Hartford", "8b", 4.7, 3, 2, "8k",
+       "Variante Dolphin de Llama 3 décrite comme moins filtrée, pour discuter et programmer. Environ 4,7 Go.",
+       ["Discussion et code"], ["Contexte 8k ; réponses variables"], "PC courant"),
+    _m("wizard-vicuna-uncensored:13b", "Wizard Vicuna Uncensored 13B", "uncensored", "Eric Hartford", "13b", 7.4, 2, 1, "2k",
+       "Variante 13B de Wizard Vicuna Uncensored. Environ 7,4 Go ; contexte limité.",
+       ["Plus grand que la version 7B"], ["Ancien modèle ; contexte 2k"], "PC doté de 16 Go de RAM"),
+    _m("wizard-vicuna-uncensored:30b", "Wizard Vicuna Uncensored 30B", "uncensored", "Eric Hartford", "30b", 18, 3, 1, "2k",
+       "Variante 30B de Wizard Vicuna Uncensored. Environ 18 Go ; exige beaucoup de mémoire.",
+       ["Variante plus grande"], ["Contexte 2k ; mémoire importante"], "Station de travail"),
+    _m("dolphin-mixtral:8x7b", "Dolphin Mixtral 8x7B", "uncensored", "Eric Hartford", "8x7b", 26, 4, 2, "32k",
+       "Variante Mixtral Dolphin présentée comme non censurée, intéressante aussi pour le code. Environ 26 Go.",
+       ["Discussion et code"], ["Téléchargement et mémoire importants"], "Station de travail"),
+]
+MODELS += UNCENSORED_MODELS
 # Modèles à usage unique : visibles dans le catalogue mais jamais « conseillés »
 NICHE_IDS = {"glm-ocr:latest", "starcoder2:7b", "nuextract:3.8b", "reader-lm:1.5b",
              "sqlcoder:7b", "sailor2:8b", "medgemma:4b"}
 # Catégories présentes dans le tableau de recommandations
-RECO_CATEGORIES = [c for c in CATEGORIES if c != "special"]
+RECO_CATEGORIES = [c for c in CATEGORIES if c not in ("special", "uncensored")]
 
 FIT_LABELS = {
     "gpu": ("✅", "Rapide", "Tient entièrement dans la carte graphique"),
