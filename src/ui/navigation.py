@@ -19,7 +19,8 @@ SECTIONS = (
                   (8, "Tâches", "Organisez vos générations et leurs résultats."),
                   (9, "Connexions", "Configurez vos moteurs locaux et vos services API."),
                   (10, "GitHub", "Retrouvez les outils de gestion de vos dépôts."),
-                  (11, "Obliteratus", "Accédez à votre atelier spécialisé et à son journal."))),
+                  (11, "Obliteratus", "Accédez à votre atelier spécialisé et à son journal."),
+                  (14, "Téléphone", "Connectez Android aux IA locales de votre PC."))),
     ("APPRENDRE", ((13, "Tuto", "Des explications et des conseils pour avancer à votre rythme."),)),
 )
 
