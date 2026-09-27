@@ -23,7 +23,8 @@ class ExportTests(unittest.TestCase):
             python.touch()
             steps = oe.make_steps(checkpoint, 'my-model', python, root / 'tools', 'ollama')
             self.assertEqual(steps[-1][1][:2], ['create', 'my-model'])
-            self.assertIn(str(checkpoint), steps[-2][1])
+            # Windows peut rendre le même dossier sous son nom court RUNNER~1.
+            self.assertTrue(Path(steps[-2][1][2]).samefile(checkpoint))
             self.assertIn('--outtype', steps[-2][1])
             self.assertEqual(steps[-2][1][-1], 'f16')
             self.assertNotEqual(steps[2][0], str(python))
