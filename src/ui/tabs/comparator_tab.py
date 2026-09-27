@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout, QWidget,
 )
 
-from src.backend import providers
+from src.backend import providers, comparison_history
 from src.backend.ai_manager import AIManager
 from src.ui.workers import StreamWorker
 
@@ -100,6 +100,7 @@ class ComparatorTab(QWidget):
         super().__init__()
         self.ai_manager = AIManager()
         self.columns: List[CompareColumn] = []
+        self.last_prompt = None
         self.init_ui()
         self.refresh_models()
 
@@ -144,6 +145,85 @@ class ComparatorTab(QWidget):
             self.columns.append(col)
             columns_row.addWidget(col, 1)
         root.addLayout(columns_row, 1)
+        history_row = QHBoxLayout()
+        history_row.addWidget(QLabel("Comparaisons enregistrées :"))
+        self.history = QComboBox()
+        self.history.setMinimumWidth(240)
+        history_row.addWidget(self.history, 1)
+        save_btn = QPushButton("Enregistrer cet essai")
+        save_btn.clicked.connect(self.save_comparison)
+        history_row.addWidget(save_btn)
+        open_btn = QPushButton("Ouvrir")
+        open_btn.clicked.connect(self.open_comparison)
+        history_row.addWidget(open_btn)
+        delete_btn = QPushButton("Supprimer")
+        delete_btn.clicked.connect(self.delete_comparison)
+        history_row.addWidget(delete_btn)
+        root.addLayout(history_row)
+        self.refresh_history()
+
+    def refresh_history(self):
+        self.history.clear()
+        self.history.addItem("Choisir un essai enregistré", None)
+        for record in comparison_history.list_saved():
+            date = record['created_at'][:16].replace('T', ' ')
+            self.history.addItem(date + ' · ' + record['prompt'][:55], record)
+
+    def save_comparison(self):
+        if any(col.busy() for col in self.columns):
+            QMessageBox.information(self, "Comparaison en cours", "Attendez la fin des réponses avant d'enregistrer.")
+            return
+        prompt = self.prompt.toPlainText().strip()
+        responses = [{'model': col.ref(), 'text': col.body.toPlainText(), 'status': col.status.text()}
+                     for col in self.columns if col.ref() and col.body.toPlainText().strip()]
+        if not prompt or prompt != self.last_prompt or len(responses) < 2:
+            QMessageBox.information(self, "Essai incomplet", "Posez une question et obtenez deux réponses avant d'enregistrer.")
+            return
+        try:
+            record = comparison_history.save(prompt, responses)
+            self.refresh_history()
+            for index in range(1, self.history.count()):
+                if self.history.itemData(index)['id'] == record['id']:
+                    self.history.setCurrentIndex(index)
+                    break
+        except OSError as error:
+            QMessageBox.warning(self, "Enregistrement impossible", str(error))
+
+    def open_comparison(self):
+        record = self.history.currentData()
+        if not record:
+            return
+        if any(col.busy() for col in self.columns):
+            QMessageBox.information(self, "Comparaison en cours", "Attendez la fin des réponses avant d'ouvrir un essai.")
+            return
+        self.prompt.setPlainText(record['prompt'])
+        self.last_prompt = record['prompt']
+        for col in self.columns:
+            col.body.clear()
+            col.status.clear()
+        for col, response in zip(self.columns, record['responses']):
+            index = col.combo.findData(response['model'])
+            if index >= 0:
+                col.combo.setCurrentIndex(index)
+            else:
+                col.combo.addItem(response['model'] + ' (ancien)', response['model'])
+                col.combo.setCurrentIndex(col.combo.count() - 1)
+            col.body.setPlainText(response['text'])
+            col.status.setText(response['status'])
+
+    def delete_comparison(self):
+        record = self.history.currentData()
+        if not record:
+            return
+        if QMessageBox.question(self, "Supprimer cet essai", "Supprimer cette comparaison enregistrée ?",
+                                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                                QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            comparison_history.remove(record['id'])
+            self.refresh_history()
+        except OSError as error:
+            QMessageBox.warning(self, "Suppression impossible", str(error))
 
     def refresh_models(self):
         local = self.ai_manager.get_available_models()
@@ -174,6 +254,7 @@ class ComparatorTab(QWidget):
             QMessageBox.information(self, "Déjà en cours", "Une comparaison est déjà en cours.")
             return
         messages = [{"role": "user", "content": text}]
+        self.last_prompt = text
         for col in self.columns:
             col.start(messages, "")
 
