@@ -33,6 +33,8 @@ class CommandRunner(QObject):
         self.captured = ""
         self._capture = False
         self._buffer = ""
+        self._auth_prompted = False
+        self._auth_text = ""
 
     def busy(self) -> bool:
         return self.proc is not None and self.proc.state() != QProcess.ProcessState.NotRunning
@@ -73,11 +75,16 @@ class CommandRunner(QObject):
         resolved = (gt.tool_status()["gh"] if program == "gh" else shutil.which(program)) or program
         self._capture = bool(step.get("capture"))
         self._buffer = ""
+        self._auth_prompted = False
+        self._auth_text = ""
+        self._auth = bool(step.get("auth"))
 
         proc = QProcess(self)
         env = QProcessEnvironment.systemEnvironment()
         env.insert("NO_COLOR", "1")
         env.insert("GH_PROMPT_DISABLED", "1")
+        if self._auth:
+            env.remove("GH_PROMPT_DISABLED")
         env.insert("GIT_TERMINAL_PROMPT", "0")
         env.insert("GH_PAGER", "")
         env.insert("PAGER", "")
@@ -98,6 +105,16 @@ class CommandRunner(QObject):
             return
         data = bytes(self.proc.readAllStandardOutput()).decode("utf-8", errors="replace")
         data = gt.strip_ansi(data)
+        if getattr(self, "_auth", False):
+            self._auth_text = (self._auth_text + data)[-2500:]
+            # GitHub CLI attend Entrée avant de commencer à vérifier le code.
+            # Lancer le navigateur via Qt et conserver le code dans le journal.
+            if not self._auth_prompted and re.search(r"[A-Z0-9]{4}-[A-Z0-9]{4}", self._auth_text):
+                self._auth_prompted = True
+                self.output.emit("\n🔑 Saisissez ce code sur https://github.com/login/device. "
+                                 "La vérification reste active dans IA Manager.\n")
+                QDesktopServices.openUrl(QUrl("https://github.com/login/device"))
+                self.proc.write(b"\n")
         if self._capture:
             self._buffer += data
         else:
@@ -193,9 +210,12 @@ class GithubTab(QWidget):
         self.install_gh_btn.clicked.connect(self.install_gh)
         tl.addWidget(self.install_gh_btn)
         login_btn = QPushButton("🔑 Se connecter")
-        login_btn.setToolTip("Ouvre une fenêtre de commande pour « gh auth login » (une seule fois)")
+        login_btn.setToolTip("Affiche le code GitHub dans le journal et ouvre le navigateur")
         login_btn.clicked.connect(self.login)
         tl.addWidget(login_btn)
+        device_btn = QPushButton("🌐 Page de connexion")
+        device_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://github.com/login/device")))
+        tl.addWidget(device_btn)
         check_btn = QPushButton("🔄")
         check_btn.setToolTip("Vérifier les outils et la connexion")
         check_btn.clicked.connect(self.check_login)
@@ -516,25 +536,17 @@ class GithubTab(QWidget):
             QMessageBox.information(self, "GitHub CLI manquant",
                                     "Installez d'abord GitHub CLI (bouton « Installer GitHub CLI »).")
             return
-        if gt.is_windows():
-            # WinGet peut avoir installé gh après le lancement de l'application.
-            # Son dossier n'est alors pas encore dans PATH : appeler le chemin
-            # absolu via PowerShell évite l'erreur « gh n'est pas reconnu ».
-            quoted = gh.replace("'", "''")
-            command = (f"& '{quoted}' auth login --web; "
-                       f"if ($LASTEXITCODE -eq 0) {{ & '{quoted}' auth setup-git }}")
-            launched = QProcess.startDetached(
-                "powershell.exe", ["-NoProfile", "-NoExit", "-Command", command])
-            if isinstance(launched, tuple):
-                launched = launched[0]
-            if launched:
-                self.append_output("\n🔑 Une fenêtre PowerShell s'est ouverte. "
-                                   "Suivez la connexion dans le navigateur, revenez ici et cliquez sur 🔄.\n")
-            else:
-                self.append_output("\n❌ PowerShell ne s'est pas ouvert. "
-                                   "Relancez IA Manager, puis réessayez.\n")
-        else:
-            self.append_output("\n🔑 Ouvrez un terminal et tapez : gh auth login && gh auth setup-git\n")
+        if self.runner.busy():
+            self.append_output("\n⏳ Une commande est déjà en cours.\n")
+            return
+        self.append_output("\n🔑 Connexion GitHub : le code va apparaître ci-dessous. "
+                           "Si le navigateur ne s'ouvre pas, utilisez « Page de connexion ».\n")
+        self.runner.run([
+            {"program": "gh", "args": ["auth", "login", "--hostname", "github.com",
+                                        "--git-protocol", "https", "--web", "--skip-ssh-key"], "auth": True},
+            {"program": "gh", "args": ["auth", "setup-git"]},
+            {"program": "gh", "args": ["auth", "status"]},
+        ])
 
     def browse_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "Dossier du dépôt", self.folder_edit.text())
