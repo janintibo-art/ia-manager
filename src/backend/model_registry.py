@@ -39,8 +39,11 @@ CATEGORIES: Dict[str, Dict[str, str]] = {
     },
     "uncensored": {
         "label": "🔓 IA moins filtrées",
-        "desc": "Modèles décrits par leurs auteurs comme moins filtrés ou « uncensored ». "
-                "Leurs réponses varient selon le modèle et ses réglages ; aucune absence totale de refus n'est garantie.",
+        "desc": "Pour commencer : Dolphin Phi sur un petit PC, Dolphin Mistral pour discuter, "
+                "DolphinCoder pour programmer. Les modèles plus grands demandent davantage de RAM. "
+                "« Moins filtré » décrit l'entraînement annoncé par leurs auteurs ; cela ne garantit "
+                "ni l'exactitude ni l'absence de refus. Les longues fenêtres de contexte consomment "
+                "davantage de mémoire que la taille du téléchargement affichée.",
     },
 }
 
@@ -534,7 +537,7 @@ EXTRA_MODELS = [
     _m("granite3.1-moe:1b", "granite3.1-moe 1b", "light", "IBM", "1b", 1.4, 2, 2, "128k", "Variante compacte pour les PC modestes ou les réponses rapides. Fichier Ollama d'environ 1.4 Go.", ["Peu gourmand en mémoire"], ["Qualité et vitesse selon le matériel"], "PC courant"),
     _m("falcon3:1b", "Falcon 3 1b", "light", "TII", "1b", 1.8, 2, 2, "8k", "Variante compacte pour les PC modestes ou les réponses rapides. Fichier Ollama d'environ 1.8 Go.", ["Peu gourmand en mémoire"], ["Qualité et vitesse selon le matériel"], "PC courant"),
     _m("falcon3:3b", "Falcon 3 3b", "light", "TII", "3b", 2, 3, 2, "32k", "Variante compacte pour les PC modestes ou les réponses rapides. Fichier Ollama d'environ 2 Go.", ["Peu gourmand en mémoire"], ["Qualité et vitesse selon le matériel"], "PC courant"),
-    _m("dolphin-llama3:70b", "dolphin-llama3 70b", "chat", "Cognitive Computations", "70b", 40, 5, 2, "8k", "Assistant de conversation local pour discuter, rédiger et résumer des textes. Fichier Ollama d'environ 40 Go.", ["Fonctionne en local"], ["Demande beaucoup de mémoire"], "Station de travail avec beaucoup de mémoire"),
+    _m("dolphin-llama3:70b", "Dolphin Llama 3 70B", "uncensored", "Eric Hartford", "70b", 40, 4, 2, "8k", "Variante Dolphin de Llama 3 présentée comme moins filtrée. Environ 40 Go.", ["Modèle de grande taille"], ["Mémoire très importante ; contexte 8k"], "Station de travail avec beaucoup de mémoire"),
     _m("cogito:32b", "cogito 32b", "chat", "Deep Cogito", "32b", 20, 5, 2, "128k", "Assistant de conversation local pour discuter, rédiger et résumer des textes. Fichier Ollama d'environ 20 Go.", ["Fonctionne en local"], ["Demande beaucoup de mémoire"], "Station de travail avec beaucoup de mémoire"),
     _m("cogito:70b", "cogito 70b", "chat", "Deep Cogito", "70b", 43, 5, 2, "128k", "Assistant de conversation local pour discuter, rédiger et résumer des textes. Fichier Ollama d'environ 43 Go.", ["Fonctionne en local"], ["Demande beaucoup de mémoire"], "Station de travail avec beaucoup de mémoire"),
     _m("gemma:2b", "gemma 2b", "light", "Communauté", "2b", 1.7, 2, 3, "8k", "Variante compacte pour les PC modestes ou les réponses rapides. Fichier Ollama d'environ 1.7 Go.", ["Peu gourmand en mémoire"], ["Qualité et vitesse selon le matériel"], "PC courant"),
@@ -583,6 +586,30 @@ UNCENSORED_MODELS = [
     _m("dolphin-mixtral:8x7b", "Dolphin Mixtral 8x7B", "uncensored", "Eric Hartford", "8x7b", 26, 4, 2, "32k",
        "Variante Mixtral Dolphin présentée comme non censurée, intéressante aussi pour le code. Environ 26 Go.",
        ["Discussion et code"], ["Téléchargement et mémoire importants"], "Station de travail"),
+    _m("llama2-uncensored:7b", "Llama 2 Uncensored 7B", "uncensored", "George Sung / Jarrad Hope", "7b", 3.8, 2, 1, "2k",
+       "Variante de Llama 2 présentée comme non censurée. Environ 3,8 Go.",
+       ["Taille accessible"], ["Ancien modèle ; contexte 2k"], "PC courant"),
+    _m("dolphincoder:7b", "DolphinCoder 7B", "uncensored", "Eric Hartford", "7b", 4.2, 3, 1, "16k",
+       "Dolphin orienté programmation, basé sur StarCoder2 et présenté comme non censuré. Environ 4,2 Go.",
+       ["Spécialisé en code"], ["Peu adapté aux discussions généralistes"], "PC courant"),
+    _m("dolphin-llama3:8b-256k", "Dolphin Llama 3 8B (contexte long)", "uncensored", "Eric Hartford", "8b", 4.7, 3, 2, "250k",
+       "Variante Dolphin Llama 3 dotée d'une grande fenêtre de contexte. Environ 4,7 Go à télécharger.",
+       ["Documents et conversations plus longs"], ["Un grand contexte peut épuiser la mémoire du PC"], "PC doté de 16 à 32 Go de RAM"),
+    _m("wizardlm-uncensored:13b", "WizardLM Uncensored 13B", "uncensored", "Eric Hartford", "13b", 7.4, 2, 1, "4k",
+       "Version de WizardLM basée sur Llama 2 et présentée comme non censurée. Environ 7,4 Go.",
+       ["Autre famille de modèles à essayer"], ["Ancien modèle ; contexte 4k"], "PC doté de 16 Go de RAM"),
+    _m("everythinglm:13b", "EverythingLM 13B", "uncensored", "EverythingLM", "13b", 7.4, 2, 1, "16k",
+       "Modèle non censuré basé sur Llama 2, avec contexte de 16k. Environ 7,4 Go.",
+       ["Contexte 16k"], ["Modèle ancien ; prévoir assez de mémoire"], "PC doté de 16 Go de RAM"),
+    _m("dolphincoder:15b", "DolphinCoder 15B", "uncensored", "Eric Hartford", "15b", 9.1, 4, 1, "16k",
+       "Version 15B de DolphinCoder pour programmer, basée sur StarCoder2. Environ 9,1 Go.",
+       ["Code et projets plus complexes"], ["Mémoire supérieure à la version 7B"], "PC doté de 24 Go de RAM"),
+    _m("llama2-uncensored:70b", "Llama 2 Uncensored 70B", "uncensored", "George Sung / Jarrad Hope", "70b", 39, 3, 1, "2k",
+       "Grande variante de Llama 2 Uncensored. Environ 39 Go à télécharger.",
+       ["Grande taille"], ["Contexte limité à 2k ; mémoire très importante"], "Station de travail"),
+    _m("dolphin-mixtral:8x22b", "Dolphin Mixtral 8x22B", "uncensored", "Eric Hartford", "8x22b", 80, 4, 2, "64k",
+       "Grande variante Dolphin Mixtral, orientée notamment vers le code. Environ 80 Go à télécharger.",
+       ["Contexte 64k"], ["Réservé aux machines dotées de beaucoup de mémoire"], "Station de travail haut de gamme"),
 ]
 MODELS += UNCENSORED_MODELS
 # Modèles à usage unique : visibles dans le catalogue mais jamais « conseillés »
