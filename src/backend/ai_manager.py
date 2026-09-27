@@ -8,6 +8,7 @@ from typing import Dict, List
 import requests
 
 from src.backend.model_registry import MODELS
+from src.backend import storage
 
 
 class AIManager:
@@ -17,7 +18,7 @@ class AIManager:
     """Orchestration des IA locales via le serveur Ollama"""
 
     def __init__(self):
-        self.models_dir = Path.home() / ".ia_manager" / "models"
+        self.models_dir = storage.app_models()
         self.models_dir.mkdir(parents=True, exist_ok=True)
         self.ollama_url = "http://localhost:11434"
 

@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
 from src.backend import obliteratus as ob, settings, local_jobs
 from src.backend import python_detection as pd
 from src.backend import obliteratus_export as oe
+from src.backend import storage
 
 
 class ObliteratusTab(QWidget):
@@ -287,7 +288,7 @@ class ObliteratusTab(QWidget):
         ob.tools_dir().mkdir(parents=True, exist_ok=True)
         self.process.setWorkingDirectory(str(ob.tools_dir()))
         if self.mode == "export":
-            source = Path.home() / "ia-conversion/llama.cpp-master"
+            source = storage.conversions() / "llama.cpp-master"
             if source.is_dir():
                 self.process.setWorkingDirectory(str(source))
         env = QProcessEnvironment.systemEnvironment()

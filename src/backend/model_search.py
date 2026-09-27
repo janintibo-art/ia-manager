@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 import requests
-from src.backend import settings
+from src.backend import settings, storage
 
 HF_API = "https://huggingface.co/api/models"
 HF_SITE = "https://huggingface.co"
@@ -267,7 +267,7 @@ def civitai_details(model_id: str, timeout: int = 20) -> Dict:
 
 def download_civitai_file(asset: Dict, timeout: int = 60, on_progress=None, should_stop=None) -> str:
     from pathlib import Path
-    target_dir = Path.home() / ".ia_manager" / "models" / "image_downloads"
+    target_dir = storage.app_models() / "image_downloads"
     target_dir.mkdir(parents=True, exist_ok=True)
     safe = re.sub(r"[^A-Za-z0-9._-]+", "_", asset.get("asset", "model.bin"))
     target = target_dir / safe
@@ -330,7 +330,7 @@ def github_details(repo: str, timeout: int = 20) -> Dict:
 def download_github_gguf(repo: str, asset: Dict, timeout: int = 60, on_progress=None, should_stop=None) -> str:
     """Télécharge un asset GGUF dans le cache local et renvoie son chemin."""
     from pathlib import Path
-    target_dir = Path.home() / ".ia_manager" / "models" / "downloads"
+    target_dir = storage.app_models() / "downloads"
     target_dir.mkdir(parents=True, exist_ok=True)
     safe = re.sub(r"[^A-Za-z0-9._-]+", "_", f"{repo.replace('/', '_')}_{asset['asset']}")
     target = target_dir / safe

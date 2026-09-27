@@ -5,10 +5,11 @@ import re
 import shutil
 from uuid import uuid4
 from pathlib import Path
+from src.backend import storage
 
 def model_library(root=None, export_root=None):
     """Checkpoints complets et conversions locales associées, sans charger les poids."""
-    export_root = Path(export_root) if export_root else Path.home() / 'ia-conversion/exports'
+    export_root = Path(export_root) if export_root else storage.conversions() / 'exports'
     conversions = {}
     for manifest in export_root.glob('*/source.json'):
         try:
@@ -89,7 +90,7 @@ def make_steps(checkpoint, name, python, root=None, ollama=None):
             ollama = str(candidate)
     if not ollama:
         raise ValueError('Ollama introuvable : installez-le, puis relancez IA Manager.')
-    root = Path(root) if root else Path.home() / 'ia-conversion'
+    root = Path(root) if root else storage.conversions()
     venv = root / 'venv'
     converter_python = venv / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
     source = root / 'llama.cpp-master'

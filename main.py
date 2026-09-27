@@ -12,7 +12,7 @@ from pathlib import Path
 from PyQt6.QtGui import QFont, QIcon
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
-from src.backend import settings
+from src.backend import settings, storage
 from src.ui import style
 from src.ui.branding import asset
 from src.ui.main_window import MainWindow
@@ -42,7 +42,7 @@ def handle_exception(exc_type, exc_value, exc_tb):
 
 def main():
     """Point d'entrée principal"""
-    (Path.home() / ".ia_manager" / "models").mkdir(parents=True, exist_ok=True)
+    storage.app_models().mkdir(parents=True, exist_ok=True)
     (Path.home() / ".ia_manager" / "config").mkdir(parents=True, exist_ok=True)
 
     sys.excepthook = handle_exception

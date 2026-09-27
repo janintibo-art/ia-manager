@@ -631,7 +631,8 @@ class ChatTab(QWidget):
     def history_archive_folder(self):
         if self.project_id:
             return Path(self.pm.project_folder(self.project_id)) / "archives_chat"
-        return Path.home() / ".ia_manager" / "archives_chat"
+        from src.backend import storage
+        return storage.backups() / "archives_chat"
 
     def open_history_archives(self):
         try:
@@ -729,7 +730,8 @@ class ChatTab(QWidget):
     def save_folder(self) -> Path:
         if self.project_id:
             return self.pm.files_folder(self.project_id)
-        return Path.home()
+        from src.backend import storage
+        return storage.backups()
 
     def save_zip(self, index: int):
         blocks = code_tools.extract_code_blocks(self.messages[index]["content"])

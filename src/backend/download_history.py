@@ -6,28 +6,33 @@ from datetime import datetime
 from pathlib import Path
 from threading import RLock
 
-ROOT = Path.home() / ".ia_manager" / "models"
-HISTORY = ROOT / "download_history.json"
+from src.backend import storage
+
+def _root():
+    return storage.app_models()
+
+def _history():
+    return _root() / "download_history.json"
 _LOCK = RLock()
 
 
 def list_entries():
     with _LOCK:
         try:
-            data = json.loads(HISTORY.read_text(encoding="utf-8")) if HISTORY.exists() else []
+            data = json.loads(_history().read_text(encoding="utf-8")) if _history().exists() else []
             return data if isinstance(data, list) else []
         except Exception:
             return []
 
 
 def _save(data):
-    ROOT.mkdir(parents=True, exist_ok=True)
-    fd, name = tempfile.mkstemp(prefix="history_", suffix=".tmp", dir=ROOT)
+    _root().mkdir(parents=True, exist_ok=True)
+    fd, name = tempfile.mkstemp(prefix="history_", suffix=".tmp", dir=_root())
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as stream:
             json.dump(data[:100], stream, ensure_ascii=False, indent=2)
             stream.flush(); os.fsync(stream.fileno())
-        os.replace(name, HISTORY)
+        os.replace(name, _history())
     finally:
         if os.path.exists(name): os.unlink(name)
 
@@ -46,8 +51,8 @@ def cleanup_cache(keep_history: bool = True) -> int:
         entries = list_entries()
         referenced = {str(item.get("path")) for item in entries} if keep_history else set()
         removed = 0
-        if ROOT.exists():
-            for folder in (ROOT / "downloads", ROOT / "image_downloads"):
+        if _root().exists():
+            for folder in (_root() / "downloads", _root() / "image_downloads"):
                 for path in folder.glob("*") if folder.exists() else []:
                     if path.is_file() and (path.name.endswith(".part") or str(path) not in referenced):
                         try:
@@ -61,7 +66,7 @@ def cache_stats():
     total = 0
     files = 0
     partial = 0
-    for folder in (ROOT / "downloads", ROOT / "image_downloads"):
+    for folder in (_root() / "downloads", _root() / "image_downloads"):
         if not folder.exists():
             continue
         for path in folder.glob("*"):

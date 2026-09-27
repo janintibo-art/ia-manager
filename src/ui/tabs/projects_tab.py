@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QSplitter, QTabWidget, QTextEdit, QVBoxLayout, QWidget,
 )
 
-from src.backend import settings
+from src.backend import settings, storage
 from src.backend.ai_manager import AIManager
 from src.backend import project_memory
 from src.backend.project_manager import (
@@ -597,7 +597,7 @@ class ProjectsTab(QWidget):
     def export_project(self):
         if not self.current_pid:
             return
-        folder = QFileDialog.getExistingDirectory(self, "Où enregistrer la sauvegarde ?", str(self.pm.root))
+        folder = QFileDialog.getExistingDirectory(self, "Où enregistrer la sauvegarde ?", str(storage.backups()))
         if folder:
             out = self.pm.export_project(self.current_pid, folder)
             self.saves_status.setText(f"✅ Sauvegarde créée : {html.escape(str(out))}")

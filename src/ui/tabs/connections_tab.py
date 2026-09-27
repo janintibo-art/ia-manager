@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
 )
 
 from src.backend import providers as pv
-from src.backend import settings, diagnostics, settings_backup
+from src.backend import settings, diagnostics, settings_backup, storage
 from src.backend.ai_manager import AIManager
 from src.ui import style
 from src.ui.workers import DownloadWorker, FunctionWorker
@@ -159,6 +159,29 @@ class ConnectionsTab(QWidget):
         title = QLabel("Connexions et IA supplémentaires")
         title.setObjectName("Title")
         root.addWidget(title)
+
+        # Dossiers volumineux : les copies se font hors du thread de l'interface.
+        box, lay = card("💽  Emplacement des modèles et sauvegardes",
+                        "Choisissez un dossier sur D: (ou un autre disque). Copiez vos données existantes "
+                        "avant de changer leur emplacement. Les originaux restent en place.")
+        location = QHBoxLayout()
+        self.storage_path = QLineEdit(str(storage.root() or ""))
+        self.storage_path.setPlaceholderText("D:\\IA Manager")
+        location.addWidget(self.storage_path, 1)
+        browse_storage = QPushButton("Parcourir…")
+        browse_storage.clicked.connect(self.browse_storage)
+        location.addWidget(browse_storage)
+        lay.addLayout(location)
+        self.move_storage_button = QPushButton("📦 Copier les données et utiliser ce dossier")
+        self.move_storage_button.setObjectName("Primary")
+        self.move_storage_button.clicked.connect(self.move_storage)
+        lay.addWidget(self.move_storage_button)
+        self.storage_status = QLabel("Modèles Ollama : " + str(storage.ollama_models()) +
+                                     "\nProjets : " + str(settings.get("projects_dir")))
+        self.storage_status.setWordWrap(True)
+        self.storage_status.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        lay.addWidget(self.storage_status)
+        root.addWidget(box)
 
         # --- Comptes
         box, lay = card(
@@ -343,6 +366,64 @@ class ConnectionsTab(QWidget):
         root.addWidget(box)
 
         root.addStretch()
+
+    def browse_storage(self):
+        folder = QFileDialog.getExistingDirectory(self, "Choisir le disque et le dossier",
+                                                   self.storage_path.text() or str(storage.root() or "D:\\"))
+        if folder:
+            self.storage_path.setText(folder)
+
+    def move_storage(self):
+        try:
+            destination = storage.validate_root(self.storage_path.text().strip())
+            old_projects = __import__("pathlib").Path(settings.get("projects_dir"))
+            old_models = storage.app_models()
+            old_backups = storage.backups()
+            old_ollama = storage.ollama_models()
+            old_conversions = storage.conversions()
+            plan = [(old_projects, destination / "Projets"),
+                    (old_models, destination / "Modeles" / "Telechargements"),
+                    (old_backups, destination / "Sauvegardes"),
+                    (old_ollama, destination / "Modeles" / "Ollama"),
+                    (old_conversions, destination / "Modeles" / "Conversions")]
+            # Valider tout le plan avant la première copie.
+            for origin, target in plan:
+                if origin.exists() and (origin.resolve() == target.resolve() or
+                                        origin.resolve() in target.resolve().parents or
+                                        target.resolve() in origin.resolve().parents):
+                    if origin.resolve() != target.resolve():
+                        raise ValueError("Le dossier choisi se trouve dans un dossier existant : " + str(origin))
+            if old_ollama.exists() and any(old_ollama.iterdir()) and self.ai_manager.is_ollama_running():
+                raise RuntimeError("Quittez Ollama (icône près de l'horloge), puis recommencez la copie.")
+        except Exception as error:
+            self.storage_status.setText("❌ " + str(error))
+            return
+        self.move_storage_button.setEnabled(False)
+        self.storage_status.setText("⏳ Copie en cours. Vous pouvez continuer à utiliser l'application.")
+        self.storage_worker = FunctionWorker(self._copy_storage, destination, plan)
+        self.storage_worker.done.connect(self.storage_moved)
+        self.storage_worker.start()
+
+    @staticmethod
+    def _copy_storage(destination, plan):
+        count = 0
+        for origin, target in plan:
+            if origin.resolve() != target.resolve():
+                count += storage.copy_folder(origin, target)
+        # Le changement n'est activé qu'une fois toutes les copies terminées.
+        storage.set_ollama_location(destination / "Modeles" / "Ollama")
+        settings.set("projects_dir", str(destination / "Projets"))
+        settings.set("storage_root", str(destination))
+        return count
+
+    def storage_moved(self, ok, result):
+        self.move_storage_button.setEnabled(True)
+        if ok:
+            self.storage_status.setText(f"✅ {result} fichier(s) copiés. Relancez IA Manager et Ollama "
+                                        "pour utiliser les nouveaux dossiers. Les fichiers sur C: sont conservés.")
+        else:
+            self.storage_status.setText("❌ Copie interrompue : " + str(result) +
+                                        "\nLes emplacements précédents sont conservés. Réessayez après correction.")
 
     def export_diagnostic(self):
         try:

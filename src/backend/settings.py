@@ -16,6 +16,8 @@ _CACHE_MTIME = None
 
 DEFAULTS: Dict[str, Any] = {
     "projects_dir": str(Path.home() / "IA Manager" / "Projets"),
+    "storage_root": "",
+    "ollama_models_dir": "",
     "github_owner": "",
     "termux_script": "~/memo-depot/mise-a-jour.sh",
     "github_folder": "",
