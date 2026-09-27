@@ -720,6 +720,37 @@ def evaluate_fit(model: Dict, info: Optional[Dict]) -> str:
     return "no"
 
 
+def compatibility_details(model: Dict, info: Optional[Dict]) -> Dict:
+    """Estimation indicative : VRAM totale détectée et RAM totale, puis marge libre actuelle."""
+    needed = memory_needed_gb(model)
+    details = {"need_gb": needed, "fit": None, "vram_gb": None,
+               "ram_total_gb": None, "ram_free_gb": None, "warnings": []}
+    if not info:
+        details["warnings"].append("Matériel non analysé : compatibilité inconnue.")
+        return details
+    details["fit"] = evaluate_fit(model, info)
+    details["vram_gb"] = max(0.0, info.get("vram_gb", 0.0))
+    details["ram_total_gb"] = max(0.0, info.get("ram_gb", 0.0))
+    free = info.get("ram_available_gb")
+    if free is not None:
+        details["ram_free_gb"] = max(0.0, free)
+        # Même une IA annoncée compatible peut manquer de RAM lorsque d'autres logiciels tournent.
+        offload = max(0.0, needed - max(0.0, details["vram_gb"] - 0.5))
+        if free < offload + 1:
+            details["warnings"].append("RAM libre actuellement faible pour charger ce modèle.")
+    if not info.get("vram_exact", True):
+        details["warnings"].append("La VRAM détectée est approximative.")
+    try:
+        context = int(str(model.get("context", "0")).lower().rstrip("k"))
+        if str(model.get("context", "")).lower().endswith("k"):
+            context *= 1000
+    except ValueError:
+        context = 0
+    if context >= 32000:
+        details["warnings"].append("Le contexte maximal annoncé nécessite davantage de mémoire en pratique.")
+    return details
+
+
 def recommend(info: Dict, priority: str = "Équilibré") -> Dict[str, Optional[Dict]]:
     """Meilleur modèle par catégorie selon le PC et la priorité.
 

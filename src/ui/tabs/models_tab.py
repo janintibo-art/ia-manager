@@ -218,7 +218,8 @@ class ModelsTab(QWidget):
             if m.get("extra"):
                 text = f"✔  {m['name']}\n      Installé hors catalogue"
             else:
-                icon = reg.FIT_LABELS[reg.evaluate_fit(m, self.system_info)][0]
+                icon = (reg.FIT_LABELS[reg.evaluate_fit(m, self.system_info)][0]
+                        if self.system_info else "⚪")
                 inst = "   ✔ installé" if self.is_installed(m["id"]) else ""
                 if m.get("discovery"):
                     inst = "  🔍" + inst
@@ -290,11 +291,18 @@ class ModelsTab(QWidget):
         return "<p>Aucun modèle dans cette catégorie.</p>"
 
     def model_html(self, m: Dict) -> str:
-        fit = reg.evaluate_fit(m, self.system_info)
-        icon, fit_title, fit_text = reg.FIT_LABELS[fit]
-        fit_color = {"gpu": style.GREEN, "mixed": style.ORANGE,
-                     "cpu": style.ORANGE, "no": style.RED}[fit]
-        need = reg.memory_needed_gb(m)
+        details = reg.compatibility_details(m, self.system_info)
+        fit = details["fit"]
+        if fit:
+            icon, fit_title, fit_text = reg.FIT_LABELS[fit]
+            fit_color = {"gpu": style.GREEN, "mixed": style.ORANGE,
+                         "cpu": style.ORANGE, "no": style.RED}[fit]
+            headline = f"{icon} {fit_title} sur ce PC"
+        else:
+            fit_color = style.ORANGE
+            headline = "⚪ Compatibilité à vérifier"
+            fit_text = "Analysez votre PC pour connaître la compatibilité"
+        need = details["need_gb"]
         cat = reg.CATEGORIES[m["category"]]
         installed = self.is_installed(m["id"])
 
@@ -315,6 +323,12 @@ class ModelsTab(QWidget):
 
         installed_badge = (f" &nbsp;<span style='color:{style.GREEN}'>✔ installé</span>"
                            if installed else "")
+        from src.backend import attachments as att
+        image_input = att.model_accepts_images("ollama::" + m["id"])
+        inputs = "Texte et images" if image_input else "Texte uniquement"
+        free = details["ram_free_gb"]
+        free_row = row("RAM disponible maintenant", f"{free:.1f} Go") if free is not None else ""
+        warnings = "".join(f"<li>{html.escape(w)}</li>" for w in details["warnings"])
         if m.get("discovery"):
             installed_badge += f" &nbsp;<span style='color:{style.ACCENT_HOVER}'>🔍 Découverte</span>"
 
@@ -324,8 +338,8 @@ class ModelsTab(QWidget):
 
 <table width='100%' cellpadding='12' style='background-color:{style.SURFACE_2}; margin:8px 0'>
 <tr><td>
-<span style='color:{fit_color}; font-weight:600'>{icon} {fit_title} sur ce PC</span><br>
-<span style='color:{muted}'>{fit_text}. Besoin : ~{need:.1f} Go. {pc_line}</span>
+<span style='color:{fit_color}; font-weight:600'>{headline}</span><br>
+<span style='color:{muted}'>{fit_text}. Mémoire estimée : ~{need:.1f} Go. {pc_line}</span>
 </td></tr></table>
 
 <p>{html.escape(m['desc'])}</p>
@@ -334,11 +348,15 @@ class ModelsTab(QWidget):
 {row("Taille", f"{m['params']} de paramètres")}
 {row("Téléchargement", f"~{m['size_gb']:.1f} Go")}
 {row("Mémoire nécessaire", f"~{need:.1f} Go (VRAM + RAM)")}
+{free_row}
+{row("Entrées", inputs)}
 {row("Contexte", f"{m['context']} tokens")}
 {row("Qualité", f"<span style='color:{style.ORANGE}'>{stars(m['quality'])}</span>")}
 {row("Français", f"<span style='color:{style.ORANGE}'>{stars(m['french'], 3)}</span>")}
 {row("Nom Ollama", f"<code>{html.escape(m['id'])}</code>")}
 </table>
+<p style='color:{muted}'>Estimation pour une version Ollama courante : la taille et la mémoire peuvent changer selon la quantification et la longueur des échanges. Les modèles indiqués « images » nécessitent une version compatible.</p>
+{f"<h3 style='color:{style.ORANGE}'>À vérifier</h3><ul>{warnings}</ul>" if warnings else ""}
 
 <h3 style='color:{style.GREEN}'>Points forts</h3><ul>{strengths}</ul>
 <h3 style='color:{style.ORANGE}'>Limites</h3><ul>{weaknesses}</ul>

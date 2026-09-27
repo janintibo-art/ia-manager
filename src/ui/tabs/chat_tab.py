@@ -553,6 +553,17 @@ class ChatTab(QWidget):
         model = reg.get_model(name) if pid == "ollama" else None
         if model:
             parts.append(f"{reg.CATEGORIES[model['category']]['label']} · {model['desc']}")
+            details = reg.compatibility_details(model, self.system_info)
+            if details["fit"]:
+                label = reg.FIT_LABELS[details["fit"]][1]
+                free = details["ram_free_gb"]
+                free_text = f" · RAM libre {free:.1f} Go" if free is not None else ""
+                parts.append(f"💻 Compatibilité estimée : {label} · mémoire ~{details['need_gb']:.1f} Go"
+                             f"{free_text} · {'images et texte' if att.model_accepts_images(ref) else 'texte'}")
+                for warning in details["warnings"][:1]:
+                    parts.append(f"⚠️ {warning}")
+            else:
+                parts.append("💻 Compatibilité inconnue : lancez l'analyse du PC dans Modèles.")
         elif pid and pid != "ollama":
             parts.append("☁️ IA en ligne : vos messages et fichiers sont envoyés à ce service.")
         if self.project_id:
