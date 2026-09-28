@@ -1,4 +1,4 @@
-"""Branchement isolé de la v100 dans l'interface existante."""
+"""Branchement isolé du Studio IA v100/v101 dans l'interface existante."""
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QListWidgetItem
 
@@ -6,7 +6,7 @@ from src.ui.tabs.studio_hub_tab import StudioHubTab
 
 
 def install_v100(window):
-    """Ajoute le Studio IA sans modifier les 19 onglets historiques."""
+    """Ajoute le Studio IA sans renuméroter les 19 onglets historiques."""
     if hasattr(window, 'studio_hub_tab'):
         return window.studio_hub_tab
     tab = StudioHubTab()
@@ -15,16 +15,14 @@ def install_v100(window):
     tab.open_local_tools.connect(lambda: window.tabs.setCurrentWidget(window.creative_tools_tab))
     window.setup_tab.analysis_done.connect(tab.set_system_info)
 
-    # StudioShell a déjà construit sa navigation au moment où MainWindow est créé.
-    # On ajoute donc proprement la nouvelle entrée à sa liste sans renuméroter les onglets existants.
-    heading = QListWidgetItem("STUDIO V100")
+    heading = QListWidgetItem("STUDIO IA")
     heading.setFlags(Qt.ItemFlag.NoItemFlags)
     window.studio_shell.navigation.addItem(heading)
     item = QListWidgetItem("Studio IA local")
     item.setData(Qt.ItemDataRole.UserRole, index)
-    item.setToolTip("Catalogue multi-domaines, compatibilité matérielle et pipelines locaux.")
+    item.setToolTip("Catalogue, favoris, profils et pipelines visuels 100 % locaux.")
     window.studio_shell.navigation.addItem(item)
     window.studio_shell.entries[index] = (
-        item, "Studio IA local", "Choisissez vos modèles, outils et pipelines 100 % locaux.", "STUDIO V100"
+        item, "Studio IA local", "Choisissez vos modèles, composez vos pipelines et préparez vos outils locaux.", "STUDIO IA"
     )
     return tab
