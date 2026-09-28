@@ -13,7 +13,7 @@ class StudioNavigationTests(unittest.TestCase):
 
     def test_navigation_and_programmatic_links_stay_synchronized(self):
         tabs = QTabWidget()
-        for index in range(15):
+        for index in range(16):
             tabs.addTab(QWidget(), str(index))
         shell = StudioShell(tabs, QWidget())
         self.assertEqual(set(shell.entries), set(range(tabs.count())))

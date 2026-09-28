@@ -13,6 +13,7 @@ from src.ui.branding import asset
 SECTIONS = (
     ("CRÉER", ((4, "Chat", "Échangez avec vos modèles et donnez forme à vos idées."),
                 (3, "Projets", "Retrouvez vos consignes, fichiers et conversations."),
+                (15, "Entraîner / Fusionner", "Spécialisez vos modèles et fusionnez des variantes compatibles."),
                 (12, "Espace de travail", "Préparez vos documents, profils et essais."))),
     ("EXPLORER", ((1, "Modèles", "Organisez les modèles disponibles sur votre machine."),
                    (2, "Recherche", "Découvrez et téléchargez de nouveaux modèles."),

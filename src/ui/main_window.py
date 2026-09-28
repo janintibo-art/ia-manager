@@ -29,6 +29,7 @@ from src.ui.tabs.tasks_tab import TasksTab
 from src.ui.tabs.workspace_tab import WorkspaceTab
 from src.ui.tabs.tutorial_tab import TutorialTab
 from src.ui.tabs.mobile_tab import MobileTab
+from src.ui.tabs.training_tab import TrainingTab
 from src.ui.workers import ChatWorker
 
 SCHEDULER_INTERVAL_MS = 30_000
@@ -63,6 +64,8 @@ class MainWindow(QMainWindow):
         self.workspace_tab = WorkspaceTab()
         self.tutorial_tab = TutorialTab()
         self.mobile_tab = MobileTab()
+        self.training_tab = TrainingTab()
+        self.training_tab.models_changed.connect(self.on_models_changed)
         self.tutorial_tab.open_tab.connect(self.open_named_tab)
         self.workspace_tab.apply_profile.connect(self.apply_work_profile)
         self.workspace_tab.trials.compare_models.connect(self.compare_trial_models)
@@ -83,6 +86,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.workspace_tab, "📚 Espace de travail")
         self.tabs.addTab(self.tutorial_tab, "📘 Tuto")
         self.tabs.addTab(self.mobile_tab, "📱 Téléphone")
+        self.tabs.addTab(self.training_tab, "🧬 Entraîner / Fusionner")
 
         # Modèles installés ou supprimés : tous les onglets se mettent à jour
         self.setup_tab.models_changed.connect(self.on_models_changed)
@@ -284,6 +288,7 @@ class MainWindow(QMainWindow):
                             "Vos tâches planifiées continuent. Clic droit sur l'icône pour quitter.")
                 self.tray_hint_shown = True
             return
+        self.training_tab.shutdown()
         self.mobile_tab.shutdown()
         self.obliteratus_tab.shutdown()
         self.chat_tab.cancel_attachments()
