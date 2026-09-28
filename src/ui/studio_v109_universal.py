@@ -1,18 +1,23 @@
-"""Page Recherche universelle v109."""
+"""Page Recherche universelle v110 : recherche + actions adaptées."""
 import html
+import shutil
 
-from PyQt6.QtCore import QUrl
+from PyQt6.QtCore import QProcess, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox,
-    QCheckBox, QListWidget, QListWidgetItem, QTextBrowser, QSplitter
+    QCheckBox, QListWidget, QListWidgetItem, QTextBrowser, QSplitter, QMessageBox,
+    QFileDialog
 )
 
-from src.backend import settings, universal_search
+from src.backend import settings, universal_actions, universal_search
 from src.ui.workers import FunctionWorker
 
 
 class UniversalSearchPage(QWidget):
+    open_search_result = pyqtSignal(int, str)
+    open_pinokio = pyqtSignal(str)
+
     def __init__(self):
         super().__init__()
         self.all_results = []
@@ -21,11 +26,12 @@ class UniversalSearchPage(QWidget):
         self.pending = set()
         self.favorite_ids = set(settings.get("studio_v109_source_favorites") or [])
         self.current = None
+        self.action_process = None
 
         root = QVBoxLayout(self)
         intro = QLabel(
             "Une seule recherche interroge plusieurs catalogues en parallèle. "
-            "Une source en erreur n'empêche pas les autres de répondre."
+            "La v110 propose ensuite l'action adaptée à chaque source."
         )
         intro.setWordWrap(True); root.addWidget(intro)
 
@@ -69,13 +75,14 @@ class UniversalSearchPage(QWidget):
         root.addWidget(split, 1)
 
         actions = QHBoxLayout()
+        self.action_btn = QPushButton("Action adaptée")
+        self.action_btn.clicked.connect(self.run_adapted_action)
         self.favorite_btn = QPushButton("☆ Ajouter aux favoris")
         self.favorite_btn.clicked.connect(self.toggle_favorite)
         self.open_btn = QPushButton("Ouvrir la source")
         self.open_btn.clicked.connect(self.open_current)
-        self.pinokio_btn = QPushButton("Voir dans l'onglet Pinokio")
-        self.pinokio_btn.setVisible(False)
-        actions.addWidget(self.favorite_btn); actions.addWidget(self.open_btn); actions.addWidget(self.pinokio_btn); actions.addStretch(1)
+        actions.addWidget(self.action_btn); actions.addWidget(self.favorite_btn)
+        actions.addWidget(self.open_btn); actions.addStretch(1)
         root.addLayout(actions)
         self.update_buttons()
 
@@ -121,8 +128,7 @@ class UniversalSearchPage(QWidget):
             if self.errors:
                 labels = [universal_search.source_label(s) for s in self.errors]
                 self.status.setText(
-                    f"✅ {len(self.all_results)} résultat(s). "
-                    f"Sources indisponibles : {', '.join(labels)}."
+                    f"✅ {len(self.all_results)} résultat(s). Sources indisponibles : {', '.join(labels)}."
                 )
             else:
                 self.status.setText(f"✅ {len(self.all_results)} résultat(s) sur toutes les sources.")
@@ -130,11 +136,8 @@ class UniversalSearchPage(QWidget):
     def visible_results(self):
         favorites = self.favorite_ids if self.favorites_only.isChecked() else None
         return universal_search.filter_results(
-            self.all_results,
-            self.source_filter.currentData(),
-            self.type_filter.currentText(),
-            self.local_only.isChecked(),
-            favorites,
+            self.all_results, self.source_filter.currentData(), self.type_filter.currentText(),
+            self.local_only.isChecked(), favorites,
         )
 
     def refresh_list(self):
@@ -173,6 +176,7 @@ class UniversalSearchPage(QWidget):
         tags = ", ".join(item["tags"]) or "non indiqués"
         locality = "Pensé pour un usage local / téléchargeable" if item["local"] else "Application ou service à évaluer avant usage local"
         description = html.escape(item["description"] or "Pas de description fournie.")
+        action = universal_actions.action_for(item)
         self.details.setHtml(
             f"<h2>{html.escape(item['name'])}</h2>"
             f"<p><b>{html.escape(item['source_label'])}</b> · {html.escape(item['type'])}</p>"
@@ -180,6 +184,7 @@ class UniversalSearchPage(QWidget):
             f"<p><b>Auteur :</b> {html.escape(item['author'] or 'non indiqué')}</p>"
             f"<p><b>Tags :</b> {html.escape(tags)}</p>"
             f"<p><b>Mode :</b> {html.escape(locality)}</p>"
+            f"<p><b>Action proposée :</b> {html.escape(action['label'])}</p>"
             + (f"<p><a href='{html.escape(item['url'])}'>Ouvrir la page officielle</a></p>" if item["url"] else "")
         )
         self.update_buttons()
@@ -188,10 +193,14 @@ class UniversalSearchPage(QWidget):
         has = bool(self.current)
         self.favorite_btn.setEnabled(has)
         self.open_btn.setEnabled(has and bool((self.current or {}).get("url")))
+        self.action_btn.setEnabled(has and self.action_process is None)
         if has:
             self.favorite_btn.setText(
                 "★ Retirer des favoris" if self.current["key"] in self.favorite_ids else "☆ Ajouter aux favoris"
             )
+            self.action_btn.setText(universal_actions.action_for(self.current)["label"])
+        else:
+            self.action_btn.setText("Action adaptée")
 
     def toggle_favorite(self):
         if not self.current:
@@ -207,3 +216,83 @@ class UniversalSearchPage(QWidget):
     def open_current(self):
         if self.current and self.current.get("url"):
             QDesktopServices.openUrl(QUrl(self.current["url"]))
+
+    def run_adapted_action(self):
+        if not self.current or self.action_process is not None:
+            return
+        action = universal_actions.action_for(self.current)
+        kind = action["kind"]
+
+        if kind == "search":
+            self.open_search_result.emit(action["source_index"], action["query"])
+            return
+
+        if kind == "pinokio-download":
+            reply = QMessageBox.question(
+                self, "Télécharger dans Pinokio",
+                f"Télécharger « {self.current['name']} » dans Pinokio sans lancer ses scripts ?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+            try:
+                command = universal_actions.pinokio_download_command(self.current)
+            except Exception as exc:
+                QMessageBox.warning(self, "Pinokio", str(exc))
+                self.open_pinokio.emit(self.current.get("name", ""))
+                return
+            self.start_process(command["program"], command["args"], "", "Téléchargement Pinokio")
+            return
+
+        if kind == "clone-space":
+            git = shutil.which("git")
+            if not git:
+                QMessageBox.warning(self, "Hugging Face Space", "Git n'est pas installé ou introuvable.")
+                return
+            parent = QFileDialog.getExistingDirectory(self, "Dossier où cloner le Space")
+            if not parent:
+                return
+            try:
+                command = universal_actions.clone_command(self.current, parent, git)
+            except Exception as exc:
+                QMessageBox.warning(self, "Hugging Face Space", str(exc))
+                return
+            reply = QMessageBox.question(
+                self, "Cloner le Space",
+                f"Cloner le dépôt public dans :\n{command['target']}\n\n"
+                "Le code sera téléchargé mais ne sera pas exécuté automatiquement.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                self.start_process(command["program"], command["args"], command["cwd"], "Clonage du Space")
+            return
+
+        self.open_current()
+
+    def start_process(self, program, args, cwd, label):
+        p = QProcess(self)
+        self.action_process = p
+        if cwd:
+            p.setWorkingDirectory(cwd)
+        p.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
+        p.finished.connect(lambda code, status: self.process_done(p, code, label))
+        p.errorOccurred.connect(lambda _e: self.process_error(p, label))
+        self.status.setText("⏳ " + label + "…")
+        self.update_buttons()
+        p.start(program, args)
+
+    def process_error(self, process, label):
+        if self.action_process is process:
+            self.status.setText("❌ " + label + " : " + process.errorString())
+
+    def process_done(self, process, code, label):
+        if self.action_process is not process:
+            return
+        output = bytes(process.readAllStandardOutput()).decode("utf-8", errors="replace").strip()
+        self.action_process = None
+        process.deleteLater()
+        self.status.setText(
+            ("✅ " if code == 0 else "❌ ") + label + f" · code {code}"
+            + (f" · {output[-500:]}" if output else "")
+        )
+        self.update_buttons()

@@ -1,4 +1,4 @@
-"""Branchement isolé du Studio IA v100 à v109."""
+"""Branchement isolé du Studio IA v100 à v110."""
 import html
 from types import MethodType
 
@@ -42,6 +42,23 @@ def _repair_search_tab(window):
     tab._v102_search_fixed = True
 
 
+def _open_search_result(window, source_index, query):
+    tab = window.search_tab
+    tab.source.setCurrentIndex(int(source_index))
+    tab.query.setText(str(query))
+    window.tabs.setCurrentWidget(tab)
+    tab.search()
+
+
+def _open_pinokio_result(studio_tab, query):
+    page = studio_tab.pinokio_v107
+    page.query.setText(str(query))
+    index = studio_tab.tabs.indexOf(page)
+    if index >= 0:
+        studio_tab.tabs.setCurrentIndex(index)
+    page.search()
+
+
 def _attach_v103(tab):
     if getattr(tab, "_v103_attached", False): return
     page = StudioPlannerPage(tab); page.open_local_tools.connect(tab.open_local_tools.emit)
@@ -72,10 +89,14 @@ def _attach_v108_sources(tab):
     tab.tabs.insertTab(4, page, "Sources+"); tab._v108_sources_attached = True
 
 
-def _attach_v109(tab):
+def _attach_v109(tab, window):
     if getattr(tab, "_v109_attached", False): return
-    page = UniversalSearchPage(); tab.universal_v109 = page
-    tab.tabs.insertTab(5, page, "Recherche universelle"); tab._v109_attached = True
+    page = UniversalSearchPage()
+    page.open_search_result.connect(lambda source, query: _open_search_result(window, source, query))
+    page.open_pinokio.connect(lambda query: _open_pinokio_result(tab, query))
+    tab.universal_v109 = page
+    tab.tabs.insertTab(5, page, "Recherche universelle")
+    tab._v109_attached = True
 
 
 def _attach_termux(window):
@@ -107,13 +128,13 @@ def install_v100(window):
     if hasattr(window, "studio_hub_tab"):
         tab = window.studio_hub_tab
         _attach_v103(tab); _attach_v104(tab, window.creative_tools_tab)
-        _attach_v106(tab); _attach_v107(tab); _attach_v108_sources(tab); _attach_v109(tab)
+        _attach_v106(tab); _attach_v107(tab); _attach_v108_sources(tab); _attach_v109(tab, window)
         _attach_termux(window)
         return tab
 
     tab = StudioHubTab()
     _attach_v103(tab); _attach_v104(tab, window.creative_tools_tab)
-    _attach_v106(tab); _attach_v107(tab); _attach_v108_sources(tab); _attach_v109(tab)
+    _attach_v106(tab); _attach_v107(tab); _attach_v108_sources(tab); _attach_v109(tab, window)
     window.studio_hub_tab = tab
     index = window.tabs.addTab(tab, "✨ Studio IA local")
     tab.open_local_tools.connect(lambda: window.tabs.setCurrentWidget(window.creative_tools_tab))
@@ -124,11 +145,11 @@ def install_v100(window):
     window.studio_shell.navigation.addItem(heading)
     item = QListWidgetItem("Studio IA local")
     item.setData(Qt.ItemDataRole.UserRole, index)
-    item.setToolTip("Recherche universelle, Pinokio, Sources+, installation, stockage et pipelines.")
+    item.setToolTip("Recherche universelle avec actions, Pinokio, Sources+, installation et stockage.")
     window.studio_shell.navigation.addItem(item)
     window.studio_shell.entries[index] = (
         item, "Studio IA local",
-        "Cherchez simultanément dans plusieurs écosystèmes IA et préparez votre studio local.",
+        "Cherchez une ressource puis passez directement à l'action adaptée à sa source.",
         "STUDIO IA"
     )
     _attach_termux(window)
