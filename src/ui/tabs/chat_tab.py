@@ -218,6 +218,9 @@ class ChatTab(QWidget):
         selectors.addWidget(QLabel("IA :"))
         self.model_select = QComboBox()
         self.model_select.setMinimumWidth(320)
+        self.model_select.setMinimumContentsLength(32)
+        self.model_select.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.model_select.setMaxVisibleItems(16)
         self.model_select.currentIndexChanged.connect(self.show_hint)
         selectors.addWidget(self.model_select, 2)
         refresh_btn = QPushButton("🔄")
@@ -484,7 +487,22 @@ class ChatTab(QWidget):
         self.model_select.clear()
         local = self.ai_manager.get_available_models()
         for label, ref in providers.all_model_choices(local):
-            self.model_select.addItem(label, ref)
+            pid, name = providers.split_ref(ref)
+            model = reg.get_model(name) if pid == "ollama" else None
+            category = (reg.CATEGORIES.get(model.get("category"), {}).get("label")
+                        if model else None)
+            specialty = category or "Spécialité non renseignée"
+            display = f"{label} — {specialty}"
+            description = (model.get("desc") or "") if model else ""
+            tooltip = f"{label}\n{specialty}"
+            if description:
+                tooltip += f"\n{description}"
+            if pid != "ollama":
+                tooltip += "\n☁️ IA en ligne : messages et fichiers envoyés à ce service."
+            self.model_select.addItem(display, ref)
+            index = self.model_select.count() - 1
+            self.model_select.setItemData(index, tooltip, Qt.ItemDataRole.ToolTipRole)
+            self.model_select.setItemData(index, display, Qt.ItemDataRole.AccessibleTextRole)
         self.select_ref(current)
         self.model_select.blockSignals(False)
         self.show_hint()
@@ -549,6 +567,10 @@ class ChatTab(QWidget):
     def show_hint(self):
         parts = []
         ref = self.current_ref()
+        self.model_select.setToolTip(
+            self.model_select.currentData(Qt.ItemDataRole.ToolTipRole)
+            or "Choisissez une IA : sa spécialité apparaît à côté de son nom."
+        )
         pid, name = providers.split_ref(ref) if ref else ("", "")
         model = reg.get_model(name) if pid == "ollama" else None
         if model:
