@@ -1,3 +1,4 @@
+
 """Installation et démarrage explicites des moteurs locaux, sans shell."""
 import codecs
 import os
@@ -5,8 +6,10 @@ from pathlib import Path
 import shutil
 from PyQt6.QtCore import QLockFile, QProcess, QProcessEnvironment, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel,
-    QComboBox, QLineEdit, QPushButton, QCheckBox, QPlainTextEdit, QFileDialog)
+from PyQt6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel,
+    QComboBox, QLineEdit, QPushButton, QCheckBox, QPlainTextEdit, QFileDialog
+)
 from src.backend import creative_tools as tools, settings
 
 
@@ -18,51 +21,121 @@ class CreativeToolsTab(QWidget):
         self.process=None;self.steps=[];self.lock=None;self.logfile=None
         self.stopping=False;self.active=None;self.mode='';self.decoder=None
         root=QVBoxLayout(self)
-        intro=QLabel('Installez chaque moteur dans son environnement séparé, puis démarrez-le sur ce PC.\n'
-                     'L’installation télécharge du code et des dépendances (plusieurs Go). Les modèles restent à préparer dans le moteur.')
-        intro.setWordWrap(True);root.addWidget(intro)
+
+        self.header = QLabel(
+            'Installation guidée : choisissez un moteur, installez-le une seule fois, puis utilisez Démarrer.'
+        )
+        self.header.setWordWrap(True)
+        root.addWidget(self.header)
+
         form=QFormLayout()
         self.choice=QComboBox()
-        for key,tool in tools.TOOLS.items():self.choice.addItem(tool['name'],key)
-        form.addRow('Outil',self.choice)
-        self.info=QLabel();self.info.setWordWrap(True);form.addRow(self.info)
+        for key,tool in tools.TOOLS.items():
+            self.choice.addItem(tool['name'],key)
+        form.addRow('Moteur à installer',self.choice)
+
+        self.info=QLabel()
+        self.info.setWordWrap(True)
+        form.addRow(self.info)
+
         self.directory=QLineEdit(str(settings.get('creative_tools_root') or Path.home()/'IA Manager'/'Outils'))
-        self.pick_root=QPushButton('Parcourir…');self.pick_root.clicked.connect(self.choose_root)
-        row=QHBoxLayout();row.addWidget(self.directory);row.addWidget(self.pick_root);form.addRow('Dossier des outils',row)
-        self.python=QLineEdit();self.python.setPlaceholderText('Sélectionner python.exe, pas IA Manager.exe')
-        self.pick_python=QPushButton('Parcourir…');self.pick_python.clicked.connect(self.choose_python)
-        row=QHBoxLayout();row.addWidget(self.python);row.addWidget(self.pick_python);form.addRow('Python de départ',row)
-        self.hardware=QComboBox();self.hardware.addItem('NVIDIA — CUDA (pilote compatible requis)','nvidia');self.hardware.addItem('CPU — lent, texture 3D non prise en charge','cpu')
-        form.addRow('Profil PyTorch',self.hardware)
-        self.offline=QCheckBox('Démarrer hors ligne : utiliser les poids déjà téléchargés')
-        self.offline.setChecked(True);form.addRow(self.offline)
-        hint=QLabel('Premier essai : décocher le mode hors ligne pour télécharger les poids manquants. Ensuite arrêter et relancer hors ligne.\n'
-                    'AMD/Intel/Apple : utiliser l’installation officielle adaptée ; les recettes automatiques ci-dessous ciblent CPU et NVIDIA.')
-        hint.setWordWrap(True);form.addRow(hint);root.addLayout(form)
+        self.pick_root=QPushButton('Parcourir…')
+        self.pick_root.clicked.connect(self.choose_root)
+        row=QHBoxLayout();row.addWidget(self.directory);row.addWidget(self.pick_root)
+        form.addRow('Dossier d’installation',row)
+
+        self.python=QLineEdit()
+        self.python.setPlaceholderText('python.exe externe')
+        self.pick_python=QPushButton('Parcourir…')
+        self.pick_python.clicked.connect(self.choose_python)
+        row=QHBoxLayout();row.addWidget(self.python);row.addWidget(self.pick_python)
+        form.addRow('Python',row)
+
+        self.hardware=QComboBox()
+        self.hardware.addItem('NVIDIA — CUDA','nvidia')
+        self.hardware.addItem('CPU — plus lent','cpu')
+        form.addRow('Calcul',self.hardware)
+
+        self.offline=QCheckBox('Démarrer hors ligne après le premier téléchargement des poids')
+        self.offline.setChecked(True)
+        form.addRow(self.offline)
+
+        root.addLayout(form)
+
+        self.steps_hint = QLabel(
+            'Étapes : 1. choisir Python · 2. Installer / reprendre · 3. attendre “installé” · '
+            '4. Démarrer · 5. ouvrir l’interface.'
+        )
+        self.steps_hint.setWordWrap(True)
+        root.addWidget(self.steps_hint)
+
         prereqs=QHBoxLayout()
-        for title,url in (('Installer Python','https://www.python.org/downloads/'),('Installer Git','https://git-scm.com/downloads'),
-                          ('Outils C++ Windows','https://visualstudio.microsoft.com/visual-cpp-build-tools/'),('CUDA Toolkit','https://developer.nvidia.com/cuda-downloads')):
-            b=QPushButton(title);b.clicked.connect(lambda checked=False,u=url:QDesktopServices.openUrl(QUrl(u)));prereqs.addWidget(b)
+        for title,url in (
+            ('Installer Python','https://www.python.org/downloads/'),
+            ('Installer Git','https://git-scm.com/downloads'),
+            ('Outils C++ Windows','https://visualstudio.microsoft.com/visual-cpp-build-tools/'),
+            ('CUDA Toolkit','https://developer.nvidia.com/cuda-downloads'),
+        ):
+            b=QPushButton(title)
+            b.clicked.connect(lambda checked=False,u=url:QDesktopServices.openUrl(QUrl(u)))
+            prereqs.addWidget(b)
         root.addLayout(prereqs)
+
         actions=QHBoxLayout()
-        self.install=QPushButton('Installer / reprendre');self.install.clicked.connect(self.install_tool)
-        self.diagnose=QPushButton('Diagnostic');self.diagnose.clicked.connect(self.diagnostic)
-        self.start=QPushButton('Démarrer');self.start.clicked.connect(self.start_tool)
-        self.stop=QPushButton('Arrêter');self.stop.clicked.connect(self.stop_process);self.stop.setEnabled(False)
-        for b in (self.install,self.diagnose,self.start,self.stop):actions.addWidget(b)
+        self.install=QPushButton('1 · Installer / reprendre')
+        self.install.setObjectName('Primary')
+        self.install.clicked.connect(self.install_tool)
+        self.diagnose=QPushButton('Diagnostic')
+        self.diagnose.clicked.connect(self.diagnostic)
+        self.start=QPushButton('2 · Démarrer')
+        self.start.clicked.connect(self.start_tool)
+        self.stop=QPushButton('Arrêter')
+        self.stop.clicked.connect(self.stop_process)
+        self.stop.setEnabled(False)
+        for b in (self.install,self.diagnose,self.start,self.stop):
+            actions.addWidget(b)
         root.addLayout(actions)
+
         links=QHBoxLayout()
-        for title,handler in (('Ouvrir l’interface',self.open_interface),('Dossier du moteur',self.open_folder),('Guide officiel',self.open_guide)):
-            b=QPushButton(title);b.clicked.connect(handler);links.addWidget(b)
+        for title,handler in (
+            ('3 · Ouvrir l’interface',self.open_interface),
+            ('Dossier du moteur',self.open_folder),
+            ('Guide officiel',self.open_guide),
+        ):
+            b=QPushButton(title)
+            b.clicked.connect(handler)
+            links.addWidget(b)
         root.addLayout(links)
-        self.status=QLabel();self.status.setWordWrap(True);root.addWidget(self.status)
-        self.log=QPlainTextEdit();self.log.setReadOnly(True);self.log.setMaximumBlockCount(1600);root.addWidget(self.log,1)
+
+        self.status=QLabel()
+        self.status.setWordWrap(True)
+        root.addWidget(self.status)
+
+        self.log=QPlainTextEdit()
+        self.log.setReadOnly(True)
+        self.log.setMaximumBlockCount(1600)
+        root.addWidget(self.log,1)
+
         self.choice.currentIndexChanged.connect(self.load_profile)
         self.load_profile()
 
+    def showEvent(self, event):
+        requested = str(settings.get('creative_tools_requested') or '')
+        if requested:
+            index = self.choice.findData(requested)
+            if index >= 0:
+                self.choice.setCurrentIndex(index)
+            settings.set('creative_tools_requested','')
+        self.refresh_status()
+        super().showEvent(event)
+
     def load_profile(self):
         key=self.choice.currentData();tool=tools.TOOLS[key]
-        self.info.setText(tool['python']+' · '+tool['note'])
+        self.info.setText(
+            '<b>'+tool['name']+'</b><br>'
+            +'Python : '+tool['python']+'<br>'
+            +tool['note']
+        )
         values=settings.get('creative_tools_profiles') or {}
         value=values.get(key,{}) if isinstance(values,dict) else {}
         self.python.setText(str(value.get('python') or ''))
@@ -72,8 +145,14 @@ class CreativeToolsTab(QWidget):
     def refresh_status(self):
         try:
             record=tools.read_manifest(self.directory.text(),self.choice.currentData())
-            self.status.setText('État : '+record.get('state','non installé par ce gestionnaire')+' · Git : '+('détecté' if shutil.which('git') else 'à installer'))
-        except Exception as exc:self.status.setText(str(exc))
+            state=record.get('state','non installé')
+            self.status.setText(
+                'État : '+state+' · Git : '+('détecté' if shutil.which('git') else 'à installer')
+            )
+            installed=str(state).startswith('installé')
+            self.start.setEnabled(installed and not self.active)
+        except Exception as exc:
+            self.status.setText(str(exc))
 
     def choose_root(self):
         path=QFileDialog.getExistingDirectory(self,'Dossier des moteurs',self.directory.text())
@@ -104,9 +183,11 @@ class CreativeToolsTab(QWidget):
         try:
             root,key,python,hardware=self.config()
             if not Path(python).is_file() or 'ia_manager' in Path(python).name.lower():
-                raise ValueError('Sélectionnez un vrai interpréteur Python externe avec Parcourir.')
+                raise ValueError(
+                    'Sélectionnez python.exe avec Parcourir. Pour Hunyuan3D/TripoSR : Python 3.10 ou 3.11.'
+                )
             git=shutil.which('git')
-            if not git:raise ValueError('Installez Git avec le bouton ci-dessus, puis redémarrez IA Manager.')
+            if not git:raise ValueError('Git n’est pas installé. Cliquez sur Installer Git puis redémarrez IA Manager.')
             self.acquire(root,key)
             tools.prepare(root,key,hardware)
             steps=tools.install_plan(root,key,python,git,hardware)
@@ -115,7 +196,8 @@ class CreativeToolsTab(QWidget):
 
     def installed_config(self):
         root,key,_,hardware=self.config();p=tools.paths(root,key)
-        if not p['python'].is_file() or not p['source'].is_dir():raise ValueError('Installez d’abord le moteur dans ce dossier.')
+        if not p['python'].is_file() or not p['source'].is_dir():
+            raise ValueError('Ce moteur n’est pas encore installé. Utilisez d’abord “1 · Installer / reprendre”.')
         record=tools.read_manifest(root,key)
         return root,key,record.get('hardware',hardware)
 
@@ -131,15 +213,14 @@ class CreativeToolsTab(QWidget):
         try:
             root,key,hardware=self.installed_config()
             if tools.read_manifest(root,key).get('state')!='installé — poids à préparer':
-                raise ValueError('L’installation n’est pas terminée. Consultez le journal puis reprenez-la.')
+                raise ValueError('L’installation n’est pas terminée. Utilisez Installer / reprendre.')
             self.acquire(root,key)
             self.begin(root,key,hardware,'run',[tools.launch_command(root,key,hardware)],self.offline.isChecked())
         except Exception as exc:self.fail_setup(exc)
 
     def fail_setup(self,exc):
         if self.active:
-            self.finish(False, 'Action impossible : '+str(exc))
-            return
+            self.finish(False,'Action impossible : '+str(exc));return
         if self.lock:self.lock.unlock();self.lock=None
         self.status.setText('Action impossible : '+str(exc))
 
@@ -151,7 +232,8 @@ class CreativeToolsTab(QWidget):
         self.next_step()
 
     def set_busy(self,busy):
-        for w in (self.choice,self.directory,self.python,self.pick_root,self.pick_python,self.hardware,self.offline,self.install,self.diagnose,self.start):w.setEnabled(not busy)
+        for w in (self.choice,self.directory,self.python,self.pick_root,self.pick_python,self.hardware,self.offline,self.install,self.diagnose,self.start):
+            w.setEnabled(not busy)
         self.stop.setEnabled(busy)
 
     def write_log(self,text):
@@ -181,7 +263,7 @@ class CreativeToolsTab(QWidget):
         if self.process is p and self.mode=='run':
             key=self.active[1];url='http://127.0.0.1:'+str(tools.TOOLS[key]['port'])
             self.engine_started.emit(key,url)
-            self.status.setText('Processus démarré. Attendez l’adresse du serveur dans le journal avant d’ouvrir l’interface.')
+            self.status.setText('Moteur démarré. Attendez quelques secondes puis utilisez “3 · Ouvrir l’interface”.')
 
     def read_output(self,p):
         if self.process is p:self.write_log(self.decoder.decode(bytes(p.readAllStandardOutput())))
@@ -203,19 +285,35 @@ class CreativeToolsTab(QWidget):
     def finish(self,success,message=''):
         if self.active and self.mode=='install':
             root,key,hardware=self.active
-            try:tools.write_json(tools.paths(root,key)['manifest'],dict(managed_by='IA Manager',tool=key,hardware=hardware,state='installé — poids à préparer' if success else 'installation incomplète'))
-            except Exception as exc:success=False;message='Enregistrement de l’état impossible : '+str(exc)
+            try:
+                tools.write_json(
+                    tools.paths(root,key)['manifest'],
+                    dict(
+                        managed_by='IA Manager',tool=key,hardware=hardware,
+                        state='installé — poids à préparer' if success else 'installation incomplète'
+                    )
+                )
+            except Exception as exc:
+                success=False;message='Enregistrement de l’état impossible : '+str(exc)
         if self.logfile:self.logfile.close();self.logfile=None
         if self.lock:self.lock.unlock();self.lock=None
         mode=self.mode;self.active=None;self.steps=[];self.set_busy(False)
-        self.status.setText(message or ('Installation et imports vérifiés. Préparez les poids dans le moteur avant l’essai hors ligne.' if mode=='install' and success else 'Diagnostic terminé.' if success else 'Action incomplète.'))
+        self.status.setText(
+            message or (
+                '✅ Installation terminée. Cliquez maintenant sur “2 · Démarrer”. '
+                'Au premier démarrage, laissez Internet actif pour récupérer les poids.'
+                if mode=='install' and success else
+                'Diagnostic terminé.' if success else
+                'Action incomplète.'
+            )
+        )
+        self.refresh_status()
 
     def stop_process(self):
         self.stopping=True;self.steps=[]
         p=self.process
         if p and p.state()!=QProcess.ProcessState.NotRunning:
             if os.name=='nt':
-                # Uniquement l’arbre du processus lancé par ce gestionnaire.
                 killer=QProcess(self);killer.start('taskkill',['/PID',str(p.processId()),'/T','/F']);killer.waitForFinished(3000);killer.deleteLater()
             else:p.terminate()
             QTimer.singleShot(2000,lambda:self.kill_if_current(p))
@@ -232,7 +330,8 @@ class CreativeToolsTab(QWidget):
         if self.active:self.finish(False,'Arrêt de IA Manager.')
 
     def open_interface(self):
-        key=self.choice.currentData();QDesktopServices.openUrl(QUrl('http://127.0.0.1:'+str(tools.TOOLS[key]['port'])))
+        key=self.choice.currentData()
+        QDesktopServices.openUrl(QUrl('http://127.0.0.1:'+str(tools.TOOLS[key]['port'])))
 
     def open_folder(self):
         try:
