@@ -3,6 +3,7 @@ import time
 import uuid
 from urllib.parse import urlsplit
 import requests
+from src.backend.local_creation import validate_engine_url
 
 MODELS = (
     dict(name="SDXL 1.0", specialty="Illustration, décors, images généralistes", repo="stabilityai/stable-diffusion-xl-base-1.0", direct=True, size=1024, steps=25, cfg=7.0,
@@ -16,16 +17,23 @@ MODELS = (
 )
 
 
-def base_url(value):
-    value = value.strip().rstrip('/')
-    parsed = urlsplit(value)
-    if parsed.scheme not in ('http', 'https') or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
-        raise ValueError("Indiquez une adresse ComfyUI HTTP(S), par exemple http://127.0.0.1:8188")
-    return value
+def base_url(value, local_only=True):
+    return validate_engine_url(value, local_only)
 
 
-def checkpoints(url):
-    response = requests.get(base_url(url) + '/object_info/CheckpointLoaderSimple', timeout=15)
+def _request(method, url, **kwargs):
+    # Une adresse locale ne doit pas passer par un proxy ou une redirection.
+    with requests.Session() as session:
+        session.trust_env = False
+        response = session.request(method, url, allow_redirects=False, **kwargs)
+        if 300 <= response.status_code < 400:
+            raise ValueError("Redirection refusée : utilisez directement l'adresse du moteur.")
+        response.raise_for_status()
+        return response
+
+
+def checkpoints(url, local_only=True):
+    response = _request('GET', base_url(url, local_only) + '/object_info/CheckpointLoaderSimple', timeout=15)
     response.raise_for_status()
     names = response.json()['CheckpointLoaderSimple']['input']['required']['ckpt_name'][0]
     if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
@@ -49,9 +57,9 @@ def workflow(checkpoint, prompt, negative, size, steps, cfg, seed):
     }
 
 
-def generate(url, graph, progress=lambda _: None):
-    url = base_url(url)
-    response = requests.post(url + '/prompt', json={'prompt': graph, 'client_id': str(uuid.uuid4())}, timeout=30)
+def generate(url, graph, progress=lambda _: None, local_only=True):
+    url = base_url(url, local_only)
+    response = _request('POST', url + '/prompt', json={'prompt': graph, 'client_id': str(uuid.uuid4())}, timeout=30)
     response.raise_for_status()
     answer = response.json()
     if answer.get('node_errors') or not answer.get('prompt_id'):
@@ -60,7 +68,7 @@ def generate(url, graph, progress=lambda _: None):
     progress("Génération en cours dans ComfyUI…")
     deadline = time.monotonic() + 1800
     while time.monotonic() < deadline:
-        response = requests.get(url + '/history/' + prompt_id, timeout=15)
+        response = _request('GET', url + '/history/' + prompt_id, timeout=15)
         response.raise_for_status()
         history = response.json().get(prompt_id)
         if history:
@@ -69,7 +77,7 @@ def generate(url, graph, progress=lambda _: None):
                 raise RuntimeError("Échec ComfyUI : " + str(status.get('messages', 'consultez ComfyUI'))[-1500:])
             for output in history.get('outputs', {}).values():
                 for item in output.get('images', []):
-                    response = requests.get(url + '/view', params={k: item[k] for k in ('filename', 'subfolder', 'type') if k in item}, timeout=60)
+                    response = _request('GET', url + '/view', params={k: item[k] for k in ('filename', 'subfolder', 'type') if k in item}, timeout=60)
                     response.raise_for_status()
                     return response.content
             if status.get('completed'):

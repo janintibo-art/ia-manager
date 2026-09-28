@@ -6,9 +6,10 @@ from pathlib import Path
 from PyQt6.QtCore import Qt, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices, QImage, QPixmap
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QPushButton, QTextBrowser, QPlainTextEdit, QLineEdit, QFileDialog, QSpinBox,
+    QPushButton, QCheckBox, QTextBrowser, QPlainTextEdit, QLineEdit, QFileDialog, QSpinBox,
     QDoubleSpinBox, QMessageBox, QScrollArea)
 from src.backend import image_studio as engine, settings
+from src.backend.local_creation import LOCAL_HELP
 
 
 class ImageStudioTab(QWidget):
@@ -31,6 +32,11 @@ class ImageStudioTab(QWidget):
                        "ComfyUI doit être installé et lancé sur le PC. Les modèles de vision du chat servent à analyser les images.")
         intro.setWordWrap(True)
         root.addWidget(intro)
+        self.local_only = QCheckBox('100 % local — utiliser uniquement un moteur sur ce PC')
+        self.local_only.setChecked(settings.get('image_local_only') is not False)
+        self.local_only.setToolTip(LOCAL_HELP)
+        self.local_only.toggled.connect(lambda value: settings.set('image_local_only', value))
+        root.addWidget(self.local_only)
         self.catalog = QComboBox()
         for model in engine.MODELS:
             self.catalog.addItem(model['name'] + ' — ' + model['specialty'])
@@ -101,7 +107,7 @@ class ImageStudioTab(QWidget):
         self.open_url('https://huggingface.co/' + engine.MODELS[self.catalog.currentIndex()]['repo'])
 
     def open_engine(self):
-        try: self.open_url(engine.base_url(self.url.text()))
+        try: self.open_url(engine.base_url(self.url.text(), self.local_only.isChecked()))
         except ValueError as exc: self.on_error(str(exc))
 
     def show_model(self):
@@ -115,7 +121,7 @@ class ImageStudioTab(QWidget):
 
     def set_busy(self, busy):
         self.busy = busy
-        for widget in (self.catalog, self.url, self.connect_btn, self.checkpoint, self.prompt, self.negative, self.size, self.steps, self.cfg):
+        for widget in (self.catalog, self.url, self.connect_btn, self.checkpoint, self.prompt, self.negative, self.size, self.steps, self.cfg, self.local_only):
             widget.setEnabled(not busy)
         self.generate_btn.setEnabled(not busy and engine.MODELS[self.catalog.currentIndex()]['direct'] and self.checkpoint.count() > 0)
 
@@ -132,22 +138,24 @@ class ImageStudioTab(QWidget):
 
     def connect_engine(self):
         try:
-            url = engine.base_url(self.url.text())
+            url = engine.base_url(self.url.text(), self.local_only.isChecked())
             settings.set('image_comfy_url', url)
         except Exception as exc:
             self.on_error(str(exc)); return
         self.checkpoint.clear()
         self.status.setText('Connexion à ComfyUI…')
-        self.run_job('models', lambda: engine.checkpoints(url))
+        local_only = self.local_only.isChecked()
+        self.run_job('models', lambda: engine.checkpoints(url, local_only))
 
     def generate(self):
         try:
-            url = engine.base_url(self.url.text())
+            url = engine.base_url(self.url.text(), self.local_only.isChecked())
             graph = engine.workflow(self.checkpoint.currentText(), self.prompt.toPlainText(), self.negative.text(), self.size.currentData(), self.steps.value(), self.cfg.value(), secrets.randbelow(2**32))
         except Exception as exc:
             self.on_error(str(exc)); return
         self.status.setText('Envoi à ComfyUI…')
-        self.run_job('image', lambda: engine.generate(url, graph, self.progress.emit))
+        local_only = self.local_only.isChecked()
+        self.run_job('image', lambda: engine.generate(url, graph, self.progress.emit, local_only))
 
     def on_result(self, kind, result):
         self.set_busy(False)

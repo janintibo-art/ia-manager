@@ -4,9 +4,10 @@ from pathlib import Path
 from PyQt6.QtCore import Qt, QTimer, QUrl
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QComboBox, QLineEdit, QListWidget, QListWidgetItem, QTextBrowser, QPlainTextEdit,
+    QComboBox, QCheckBox, QLineEdit, QListWidget, QListWidgetItem, QTextBrowser, QPlainTextEdit,
     QPushButton, QFileDialog, QSplitter)
 from src.backend import media_catalog as catalog, settings
+from src.backend.local_creation import validate_engine_url, LOCAL_HELP
 
 
 class MediaStudioTab(QWidget):
@@ -21,9 +22,17 @@ class MediaStudioTab(QWidget):
         self.timer.timeout.connect(self.flush)
         root = QVBoxLayout(self)
         intro = QLabel('Choisissez une spécialité, préparez votre création et ouvrez son outil.\n'
-                       'Catalogue et accès aux moteurs : installation et génération dans les outils externes, pas dans le chat Ollama.')
+                       'Tous ces modèles disposent d’une exécution sur PC. Téléchargement initial nécessaire ; génération dans leur moteur installé.')
         intro.setWordWrap(True)
         root.addWidget(intro)
+        self.local_only = QCheckBox('100 % local — ouvrir uniquement les moteurs sur ce PC')
+        self.local_only.setChecked(settings.get('media_local_only') is not False)
+        self.local_only.toggled.connect(lambda value: settings.set('media_local_only', value))
+        self.local_only.setToolTip(LOCAL_HELP)
+        root.addWidget(self.local_only)
+        help_button = QPushButton('Comment créer sans Internet ?')
+        help_button.clicked.connect(self.show_local_help)
+        root.addWidget(help_button)
         filters = QHBoxLayout()
         self.category = QComboBox(); self.category.addItems(catalog.CATEGORIES)
         self.search = QLineEdit(); self.search.setPlaceholderText('Rechercher un modèle ou une spécialité…')
@@ -76,6 +85,10 @@ class MediaStudioTab(QWidget):
         self.prompt.textChanged.connect(self.remember)
         self.folder.textChanged.connect(self.remember)
         self.refresh()
+
+    def show_local_help(self):
+        from PyQt6.QtWidgets import QMessageBox
+        QMessageBox.information(self, 'Création sur votre PC', LOCAL_HELP)
 
     def refresh(self):
         previous = self.current_model['id'] if self.current_model else None
@@ -134,7 +147,7 @@ class MediaStudioTab(QWidget):
         if self.current_model: self.open_url(self.current_model[key])
 
     def open_engine(self):
-        try: url = catalog.engine_url(self.address.text())
+        try: url = validate_engine_url(self.address.text(), self.local_only.isChecked())
         except ValueError as exc:
             self.status.setText(str(exc)); return
         self.flush()
