@@ -10,7 +10,9 @@ from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QFormLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QFileDialog, QSpinBox, QDoubleSpinBox,
     QPlainTextEdit, QMessageBox, QTabWidget, QComboBox, QScrollArea)
-from src.backend import training_lab as lab, training_resources as resources, settings, local_jobs
+from src.backend import training_lab as lab, training_resources as resources, training_workspace as workspace, settings, local_jobs
+
+from src.ui.tabs.training_workspace_tab import ExamplesEditor, TrainingHistory
 
 
 class TrainingTab(QWidget):
@@ -65,6 +67,7 @@ class TrainingTab(QWidget):
         for b in (diagnostic, help_button, merge_help): buttons.addWidget(b)
         layout.addLayout(buttons)
         pages = QTabWidget()
+        self.pages = pages
         layout.addWidget(pages, 3)
         def scroll_page(widget):
             area = QScrollArea()
@@ -133,6 +136,10 @@ class TrainingTab(QWidget):
         self.model_b = QLineEdit()
         f.addRow('Modèle A — Hugging Face / dossier', self.model_a)
         f.addRow('Modèle B — même base', self.model_b)
+        self.merge_method = QComboBox()
+        self.merge_method.addItem('Moyenne pondérée (linéaire)', 'linear')
+        self.merge_method.addItem('Interpolation sphérique (SLERP)', 'slerp')
+        f.addRow('Méthode de fusion', self.merge_method)
         self.weight = QDoubleSpinBox()
         self.weight.setRange(.05, .95)
         self.weight.setSingleStep(.05)
@@ -143,7 +150,7 @@ class TrainingTab(QWidget):
         f.addRow(self.merge_budget)
         self.model_a.textChanged.connect(self.update_merge_budget)
         self.model_b.textChanged.connect(self.update_merge_budget)
-        text = QLabel('Fusion linéaire sur CPU/RAM avec MergeKit. Deux variantes issues du même modèle de base, '
+        text = QLabel('Fusion linéaire ou SLERP sur CPU/RAM avec MergeKit. Deux variantes issues du même modèle de base, '
                       'poids Safetensors non quantifiés. Architectures et vocabulaires vérifiés avant fusion ; '
                       'cette vérification ne garantit pas la qualité. Ne fusionne pas directement les modèles GGUF d’Ollama. '
                       'Prévoir plusieurs dizaines de Go libres sur disque.')
@@ -173,6 +180,12 @@ class TrainingTab(QWidget):
         imp.clicked.connect(self.import_model)
         f.addRow(imp)
         pages.addTab(scroll_page(export), 'Ollama')
+        self.examples_editor = ExamplesEditor()
+        self.examples_editor.dataset_ready.connect(self.use_dataset)
+        pages.addTab(scroll_page(self.examples_editor), 'Exemples')
+        self.history = TrainingHistory(lambda: self.job if self.process is not None else None)
+        self.history.result_selected.connect(self.use_history_result)
+        pages.addTab(self.history, 'Historique')
         guide = QPlainTextEdit()
         guide.setReadOnly(True)
         guide.setPlainText('DÉMARRAGE\n1. Installer un environnement Unsloth Windows selon le guide officiel (bouton ci-dessus). '
@@ -207,6 +220,17 @@ class TrainingTab(QWidget):
             'Sur une machine sans NVIDIA/CUDA, la fusion CPU reste accessible ; cet atelier QLoRA utilise actuellement CUDA. '
             'Sur plusieurs GPU, les mémoires ne sont pas additionnées : entraînement sur le GPU CUDA 0 du moteur. '
             'Réduire d’abord le lot, le contexte ou le modèle si la mémoire manque.')
+        guide.appendPlainText('\n\nEXEMPLES ET HISTORIQUE (v94)\n'
+            'Dans Exemples, ajouter des questions, un contexte facultatif et les réponses attendues. '
+            'Les modifications restent en mémoire jusqu’au clic sur Enregistrer. Chaque sauvegarde crée une nouvelle copie ; '
+            'le fichier choisi dans Entraînement est mis à jour. Un brouillon de moins de 10 exemples peut être conservé, '
+            'mais il ne peut pas encore servir à entraîner. Aucun contenu de vos conversations n’est importé automatiquement.\n'
+            'Historique affiche jusqu’à 200 expériences locales, leurs métriques disponibles et les résultats complets. '
+            'Les boutons préparent un import Ollama ou renseignent A/B pour une future fusion, sans lancer les calculs. '
+            'Une tâche ancienne sans marque de réussite est affichée Incomplet.\n'
+            'SLERP utilise une interpolation sphérique entre deux modèles, avec A comme point de départ et le réglage B comme '
+            'coefficient de transition. Les mêmes exigences de compatibilité s’appliquent ; ni SLERP ni la moyenne linéaire '
+            'ne garantissent un gain de qualité. Comparer les résultats sur des questions nouvelles.')
         pages.addTab(guide, 'Guide')
         self.status = QLabel('Prêt — commencez par le moteur Python et le diagnostic.')
         self.status.setWordWrap(True)
@@ -225,6 +249,26 @@ class TrainingTab(QWidget):
         row.addWidget(open_folder)
         layout.addLayout(row)
         self.update_budget()
+
+    def use_dataset(self, path):
+        self.dataset.setText(path)
+        self.status.setText('Fichier d’exemples sélectionné. Ouvrez Entraînement pour lancer un essai.')
+
+    def use_history_result(self, target, path):
+        if self.process is not None:
+            self.status.setText('Attendez la fin de la tâche pour préparer une autre opération.')
+            return
+        if target == 'ollama':
+            self.export_folder.setText(path)
+            self.pages.setCurrentIndex(2)
+        else:
+            (self.model_a if target == 'a' else self.model_b).setText(path)
+            self.pages.setCurrentIndex(1)
+
+    def record_task_state(self, status, code=None):
+        if not self.job or self.importing: return
+        try: workspace.record_state(self.job, status, code)
+        except OSError as exc: self.log.appendPlainText('État de la tâche non enregistré : '+str(exc))
 
     def tuning(self):
         return dict(context=self.context.currentData(), rank=self.rank.currentData(), batch=self.batch.currentData())
@@ -305,7 +349,7 @@ class TrainingTab(QWidget):
             settings.set('training_python', str(python))
             job = lab.create_job(action, self.model.text() if action in ('train', 'trial') else self.model_a.text(),
                 self.model_b.text(), self.dataset.text(), self.epochs.value(), self.weight.value(),
-                tuning=self.tuning(), hardware=self.system_info)
+                tuning=self.tuning(), hardware=self.system_info, merge_method=self.merge_method.currentData())
             self.start_process(str(python), ['-u', str(job/'runner.py'), str(job)], job)
         except Exception as exc:
             self.status.setText(str(exc))
@@ -349,6 +393,8 @@ class TrainingTab(QWidget):
         p.readyReadStandardOutput.connect(self.read_output)
         p.finished.connect(self.finished)
         p.errorOccurred.connect(self.process_error)
+        self.record_task_state('running')
+        self.history.refresh()
         p.start(program, args)
 
     def read_output(self):
@@ -388,11 +434,13 @@ class TrainingTab(QWidget):
         if success and (self.job/'model').is_dir():
             self.export_folder.setText(str(self.job/'model'))
         if success and self.importing: self.models_changed.emit()
+        self.record_task_state('cancelled' if self.cancelled else ('success' if success else 'failed'), code)
         self.process.deleteLater()
         self.process = None
         self.stop.setEnabled(False)
         local_jobs.release(self.token)
         self.token = None
+        self.history.refresh()
 
     def shutdown(self):
         if self.process is None: return

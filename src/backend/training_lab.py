@@ -8,7 +8,7 @@ def lab_root():
     return (storage.root() or Path.home() / '.ia_manager') / 'Entrainement'
 
 
-def read_dataset(path):
+def read_dataset(path, minimum=10):
     path = Path(path)
     if path.stat().st_size > 50 * 1024 * 1024:
         raise ValueError('Jeu limité à 50 Mo pour cette première version.')
@@ -33,8 +33,8 @@ def read_dataset(path):
         if key not in seen:
             seen.add(key)
             rows.append(row)
-    if len(rows) < 10:
-        raise ValueError('Au moins 10 exemples distincts requis (davantage conseillé).')
+    if len(rows) < minimum:
+        raise ValueError(f'Au moins {minimum} exemples distincts requis (davantage conseillé).')
     return rows
 
 
@@ -165,6 +165,10 @@ elif cfg['action'] == 'merge':
         'models':[{'model':a,'parameters':{'weight':1-cfg['weight']}},
                   {'model':b,'parameters':{'weight':cfg['weight']}}],
         'parameters':{'normalize':True}, 'tokenizer_source':a}
+    if cfg.get('merge_method') == 'slerp':
+        recipe = {'merge_method':'slerp', 'dtype':'float16', 'base_model':a,
+                  'models':[{'model':b}], 'parameters':{'t':cfg['weight']},
+                  'tokenizer_source':a}
     (job/'merge.json').write_text(json.dumps(recipe, indent=2), encoding='utf-8')
     exe = Path(sys.executable).parent / ('mergekit-yaml.exe' if os.name == 'nt' else 'mergekit-yaml')
     if not exe.is_file():
@@ -182,7 +186,7 @@ print('Opération terminée.', flush=True)
 RUNNER = 'def main():\n' + '\n'.join('    ' + line for line in RUNNER.splitlines()) + '\n\nif __name__ == \"__main__\":\n    main()\n'
 
 
-def create_job(action, model='', other='', dataset='', epochs=1, weight=.5, tuning=None, hardware=None):
+def create_job(action, model='', other='', dataset='', epochs=1, weight=.5, tuning=None, hardware=None, merge_method="linear"):
     from datetime import datetime
     import uuid
     if action not in ('train', 'trial', 'merge', 'diagnostic'):
@@ -198,11 +202,13 @@ def create_job(action, model='', other='', dataset='', epochs=1, weight=.5, tuni
         raise ValueError('Réglages d’entraînement invalides')
     if tuning['context'] not in (512, 1024, 2048, 4096) or tuning['rank'] not in (4, 8, 16, 32) or tuning['batch'] not in (1, 2, 4):
         raise ValueError('Réglages d’entraînement hors limites')
+    if merge_method not in ('linear','slerp'):
+        raise ValueError('Méthode de fusion inconnue')
     rows = read_dataset(dataset) if action in ('train', 'trial') else None
     root = lab_root() / (datetime.now().strftime('%Y%m%d-%H%M%S') + '-' + uuid.uuid4().hex[:8])
     root.mkdir(parents=True)
     config = dict(action=action, model=model.strip(), other=other.strip(), epochs=epochs, weight=weight,
-                  tuning=tuning, hardware_at_creation=hardware or {},
+                  tuning=tuning, hardware_at_creation=hardware or {}, merge_method=merge_method,
                   requirements=resources.requirements(model, **tuning, action=action))
     (root/'job.json').write_text(json.dumps(config, indent=2), encoding='utf-8')
     (root/'runner.py').write_text(RUNNER, encoding='utf-8')
