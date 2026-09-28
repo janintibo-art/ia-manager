@@ -52,7 +52,15 @@ class TrainingLabTests(unittest.TestCase):
         (folder/'model.safetensors').touch()
         with patch.object(lab, 'lab_root', return_value=self.root):
             path = lab.import_modelfile(folder, 'my-model')
-            self.assertIn(json.dumps(folder.as_posix()), path.read_text())
+            # L'export résout le chemin : sous Windows, cela peut normaliser
+            # C: en c: (ou la casse du dossier). Comparer les chemins résolus,
+            # tout en vérifiant les guillemets et le contenu exact de FROM.
+            lines = path.read_text(encoding='utf-8').splitlines()
+            self.assertTrue(lines[0].startswith('FROM "'))
+            encoded_folder = json.loads(lines[0][len('FROM '):])
+            self.assertEqual(encoded_folder, folder.resolve().as_posix())
+            self.assertTrue(Path(encoded_folder).samefile(folder))
+            self.assertEqual(lines[1:], ['PARAMETER num_ctx 4096'])
             with self.assertRaises(ValueError): lab.import_modelfile(folder, 'bad\nFROM x')
             with self.assertRaises(ValueError): lab.import_modelfile(self.root, 'valid')
 
