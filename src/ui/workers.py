@@ -1,13 +1,10 @@
 """Tâches en arrière-plan (pour ne pas figer la fenêtre)"""
 
 from typing import Dict, List
-
 from PyQt6.QtCore import QThread, pyqtSignal
 
 
 class SafeThread(QThread):
-    """QThread qui reste en mémoire jusqu'à sa fin, même si plus personne ne le référence.
-    (Qt ferme l'application si un thread encore actif est détruit.)"""
     _alive: set = set()
 
     def __init__(self):
@@ -20,24 +17,40 @@ class SafeThread(QThread):
 
 
 class DownloadWorker(SafeThread):
-    """Télécharge un modèle via Ollama"""
+    """Télécharge un modèle via Ollama avec progression et annulation."""
+    progress = pyqtSignal(int, int)
+    status = pyqtSignal(str)
     finished_ok = pyqtSignal(bool, str)
 
     def __init__(self, ai_manager, model_id):
         super().__init__()
         self.ai_manager = ai_manager
         self.model_id = model_id
+        self._stop = False
+
+    def stop(self):
+        self._stop = True
+        self.requestInterruption()
 
     def run(self):
         try:
-            self.ai_manager.download_model(self.model_id)
+            if hasattr(self.ai_manager, "download_model_stream"):
+                self.ai_manager.download_model_stream(
+                    self.model_id,
+                    on_progress=lambda done, total: self.progress.emit(done, total),
+                    on_status=self.status.emit,
+                    should_stop=lambda: self._stop or self.isInterruptionRequested(),
+                )
+            else:
+                self.ai_manager.download_model(self.model_id)
             self.finished_ok.emit(True, "")
+        except InterruptedError:
+            self.finished_ok.emit(False, "Téléchargement annulé.")
         except Exception as e:
             self.finished_ok.emit(False, str(e))
 
 
 class FileDownloadWorker(SafeThread):
-    """Télécharge un fichier avec progression, reprise et annulation."""
     progress = pyqtSignal(int, int)
     finished_ok = pyqtSignal(bool, str)
 
@@ -59,7 +72,6 @@ class FileDownloadWorker(SafeThread):
 
 
 class ChatWorker(SafeThread):
-    """Interroge l'IA (locale ou distante) avec l'historique et les consignes du projet"""
     answered = pyqtSignal(str)
 
     def __init__(self, model_ref: str, messages: List[Dict], system: str = ""):
@@ -94,7 +106,6 @@ class ChatWorker(SafeThread):
 
 
 class FunctionWorker(SafeThread):
-    """Lance une fonction quelconque en arrière-plan : done(ok, résultat ou message d'erreur)"""
     done = pyqtSignal(bool, object)
 
     def __init__(self, func, *args):
@@ -110,7 +121,6 @@ class FunctionWorker(SafeThread):
 
 
 class StreamWorker(SafeThread):
-    """Réponse de l'IA au fil de l'eau : token(morceau) puis done(texte complet, statistiques)"""
     token = pyqtSignal(str)
     phase = pyqtSignal(str)
     done = pyqtSignal(str, dict)

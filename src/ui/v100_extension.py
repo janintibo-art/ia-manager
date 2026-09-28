@@ -1,5 +1,5 @@
 
-"""Branchement isolé du Studio IA v100 à v116."""
+"""Branchement isolé du Studio IA v100 à v117."""
 import html
 from types import MethodType
 from PyQt6.QtCore import Qt
@@ -21,7 +21,7 @@ from src.ui.studio_v114_mapping import RigMappingClipsPage
 from src.ui.studio_v115_library import AnimationLibraryPage
 from src.ui.studio_v116_pipeline import CharacterPipelinePage
 from src.ui.termux_tab import TermuxTab
-from src.ui.workers import FunctionWorker
+from src.ui.workers import FunctionWorker, DownloadWorker
 
 def _repair_search_tab(window):
     tab=getattr(window,'search_tab',None)
@@ -37,6 +37,90 @@ def _repair_search_tab(window):
     try: tab.result_list.currentItemChanged.disconnect(tab.on_result_selected)
     except (TypeError,RuntimeError): pass
     tab.on_result_selected=MethodType(on_result_selected,tab); tab.result_list.currentItemChanged.connect(tab.on_result_selected); tab._v102_search_fixed=True
+
+
+def _repair_ollama_progress(window):
+    tab = getattr(window, "search_tab", None)
+    if tab is None or getattr(tab, "_v117_ollama_progress", False):
+        return
+
+    old_cancel = tab.cancel_download
+    old_done = tab.on_downloaded
+
+    def human_bytes(value):
+        value = float(max(0, int(value or 0)))
+        for unit in ("o", "Ko", "Mo", "Go"):
+            if value < 1024 or unit == "Go":
+                return f"{value:.1f} {unit}" if unit != "o" else f"{int(value)} {unit}"
+            value /= 1024
+
+    def on_ollama_progress(self, done, total):
+        if total > 0:
+            self.progress.setRange(0, 100)
+            self.progress.setValue(min(100, int(done * 100 / total)))
+            self.dl_status.setText(
+                f"⏳ Ollama : {human_bytes(done)} / {human_bytes(total)} "
+                f"({int(done * 100 / total)} %)"
+            )
+        else:
+            self.progress.setRange(0, 0)
+
+    def on_ollama_status(self, status):
+        if not status:
+            return
+        if self.progress.maximum() == 0:
+            self.dl_status.setText("⏳ Ollama : " + str(status))
+
+    def start_download(self, name, size_text=""):
+        if not self.ai_manager.is_ollama_running():
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(
+                self, "Ollama absent",
+                "Ollama doit être installé et lancé pour télécharger des modèles."
+            )
+            return
+        installed = {m.lower() for m in self.ai_manager.get_available_models(force=True)}
+        if name.lower() in installed:
+            self.dl_status.setText(f"✅ {name} est déjà installé.")
+            if self.details:
+                self.show_details(self.details)
+            return
+        self.progress.setVisible(True)
+        self.progress.setRange(0, 0)
+        self.progress.setValue(0)
+        self.cancel_btn.setVisible(True)
+        self.dl_status.setText(f"⏳ Préparation du téléchargement de {name} {size_text}…")
+        self.dl_worker = DownloadWorker(self.ai_manager, name)
+        self.dl_worker.progress.connect(self.on_ollama_progress)
+        self.dl_worker.status.connect(self.on_ollama_status)
+        self.dl_worker.finished_ok.connect(lambda ok, err, n=name: self.on_downloaded(ok, err, n))
+        self.dl_worker.start()
+        self.update_buttons()
+
+    def cancel_download(self):
+        if self.dl_worker is not None and self.dl_worker.isRunning():
+            self.dl_worker.stop()
+            self.dl_status.setText("⏹ Annulation Ollama demandée…")
+            return
+        old_cancel()
+
+    def on_downloaded(self, ok, error, name):
+        self.dl_worker = None
+        self.progress.setRange(0, 100)
+        old_done(ok, error, name)
+
+    from types import MethodType
+    tab.on_ollama_progress = MethodType(on_ollama_progress, tab)
+    tab.on_ollama_status = MethodType(on_ollama_status, tab)
+    tab.start_download = MethodType(start_download, tab)
+    tab.cancel_download = MethodType(cancel_download, tab)
+    tab.on_downloaded = MethodType(on_downloaded, tab)
+    try:
+        tab.cancel_btn.clicked.disconnect()
+    except (TypeError, RuntimeError):
+        pass
+    tab.cancel_btn.clicked.connect(tab.cancel_download)
+    tab._v117_ollama_progress = True
 
 def _open_search_result(window,source_index,query):
     tab=window.search_tab; tab.source.setCurrentIndex(int(source_index)); tab.query.setText(str(query)); window.tabs.setCurrentWidget(tab); tab.search()
@@ -90,7 +174,7 @@ def _attach_termux(window):
     QApplication.instance().aboutToQuit.connect(tab.shutdown); return tab
 
 def install_v100(window):
-    _repair_search_tab(window); studio_advisor.extend_catalog(); extend_packs_v105(); extend_packs_v111()
+    _repair_search_tab(window); _repair_ollama_progress(window); studio_advisor.extend_catalog(); extend_packs_v105(); extend_packs_v111()
     if hasattr(window,'studio_hub_tab'):
         tab=window.studio_hub_tab
         _attach_v103(tab); _attach_v104(tab,window.creative_tools_tab); _attach_v111(tab); _attach_v112(tab); _attach_v113(tab); _attach_v114(tab); _attach_v115(tab); _attach_v116(tab); _attach_v106(tab); _attach_v107(tab); _attach_v108_sources(tab); _attach_v109(tab,window); _attach_termux(window)

@@ -1,5 +1,6 @@
 """Gestionnaire principal des IA (via Ollama)"""
 
+import json
 from pathlib import Path
 from threading import RLock
 import time
@@ -74,24 +75,49 @@ class AIManager:
             return f"Erreur : {e}"
 
     def chat_messages(self, model: str, messages: List[Dict], system: str = "") -> str:
-        """Discussion avec historique (images comprises) ; `system` = consignes du projet"""
         from src.backend.providers import chat_ollama
         return chat_ollama(model, messages, system)
 
-    def download_model(self, model_id: str) -> bool:
-        """Télécharger un modèle via Ollama"""
-        response = requests.post(
+    def download_model_stream(self, model_id: str, on_progress=None, on_status=None, should_stop=None) -> bool:
+        """Télécharge un modèle Ollama en exposant la progression NDJSON réelle."""
+        with requests.post(
             f"{self.ollama_url}/api/pull",
-            json={"model": model_id, "name": model_id, "stream": False},
-            timeout=7200,
-        )
-        if response.status_code != 200:
-            raise RuntimeError(f"Ollama a répondu {response.status_code} : {response.text[:200]}")
+            json={"model": model_id, "name": model_id, "stream": True},
+            stream=True,
+            timeout=(10, 7200),
+        ) as response:
+            if response.status_code != 200:
+                raise RuntimeError(f"Ollama a répondu {response.status_code} : {response.text[:300]}")
+            last_status = ""
+            for raw in response.iter_lines(decode_unicode=True):
+                if should_stop and should_stop():
+                    response.close()
+                    raise InterruptedError("Téléchargement annulé.")
+                if not raw:
+                    continue
+                try:
+                    event = json.loads(raw)
+                except (TypeError, json.JSONDecodeError):
+                    continue
+                if event.get("error"):
+                    raise RuntimeError(str(event["error"]))
+                status = str(event.get("status") or "")
+                if status and status != last_status:
+                    last_status = status
+                    if on_status:
+                        on_status(status)
+                completed = int(event.get("completed") or 0)
+                total = int(event.get("total") or 0)
+                if on_progress and (completed or total):
+                    on_progress(completed, total)
         self.invalidate_model_cache(self.ollama_url)
         return True
 
+    def download_model(self, model_id: str) -> bool:
+        """Compatibilité : téléchargement Ollama sans callbacks."""
+        return self.download_model_stream(model_id)
+
     def delete_model(self, model_name: str) -> bool:
-        """Supprimer un modèle"""
         try:
             response = requests.delete(
                 f"{self.ollama_url}/api/delete",
@@ -105,7 +131,6 @@ class AIManager:
             return False
 
     def list_running(self, force: bool = False) -> List[Dict]:
-        """IA actuellement chargées en mémoire (VRAM/RAM), cache de 2 secondes."""
         now = time.monotonic()
         with self._cache_lock:
             cached = self._running_cache.get(self.ollama_url)
@@ -123,7 +148,6 @@ class AIManager:
         return [dict(item) for item in cached[1]] if cached else []
 
     def unload_model(self, model_name: str) -> bool:
-        """Décharger une IA de la mémoire tout de suite (keep_alive: 0)"""
         try:
             response = requests.post(
                 f"{self.ollama_url}/api/generate",
