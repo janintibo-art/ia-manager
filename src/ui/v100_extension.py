@@ -1,9 +1,9 @@
-"""Branchement isolé du Studio IA v100 à v107."""
+"""Branchement isolé du Studio IA v100 à v108."""
 import html
 from types import MethodType
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QListWidgetItem
+from PyQt6.QtWidgets import QApplication, QListWidgetItem
 
 from src.backend import model_search as ms
 from src.backend import studio_advisor
@@ -13,6 +13,8 @@ from src.ui.studio_v103 import StudioPlannerPage
 from src.ui.studio_v104 import PackInstallerPage
 from src.ui.studio_v106 import WeightStoragePage
 from src.ui.studio_v107 import PinokioPage
+from src.ui.studio_v108_sources import ExtraSourcesPage
+from src.ui.termux_tab import TermuxTab
 from src.ui.workers import FunctionWorker
 
 
@@ -63,29 +65,64 @@ def _attach_v107(tab):
     tab.tabs.insertTab(3, page, "Pinokio"); tab._v107_attached = True
 
 
+def _attach_v108_sources(tab):
+    if getattr(tab, "_v108_sources_attached", False): return
+    page = ExtraSourcesPage(); tab.sources_v108 = page
+    tab.tabs.insertTab(4, page, "Sources+"); tab._v108_sources_attached = True
+
+
+def _attach_termux(window):
+    if hasattr(window, "termux_tab"):
+        return window.termux_tab
+    tab = TermuxTab()
+    window.termux_tab = tab
+    index = window.tabs.addTab(tab, "📱 Termux")
+    heading = QListWidgetItem("TÉLÉPHONE & TERMINAL")
+    heading.setFlags(Qt.ItemFlag.NoItemFlags)
+    window.studio_shell.navigation.addItem(heading)
+    item = QListWidgetItem("Termux")
+    item.setData(Qt.ItemDataRole.UserRole, index)
+    item.setToolTip("Commandes Termux, GitHub et connexion SSH au téléphone.")
+    window.studio_shell.navigation.addItem(item)
+    window.studio_shell.entries[index] = (
+        item, "Termux",
+        "Préparez les commandes Android et pilotez Termux en SSH depuis le PC.",
+        "TÉLÉPHONE & TERMINAL"
+    )
+    QApplication.instance().aboutToQuit.connect(tab.shutdown)
+    return tab
+
+
 def install_v100(window):
     _repair_search_tab(window)
     studio_advisor.extend_catalog()
     extend_packs_v105()
     if hasattr(window, "studio_hub_tab"):
         tab = window.studio_hub_tab
-        _attach_v103(tab); _attach_v104(tab, window.creative_tools_tab); _attach_v106(tab); _attach_v107(tab)
+        _attach_v103(tab); _attach_v104(tab, window.creative_tools_tab)
+        _attach_v106(tab); _attach_v107(tab); _attach_v108_sources(tab)
+        _attach_termux(window)
         return tab
+
     tab = StudioHubTab()
-    _attach_v103(tab); _attach_v104(tab, window.creative_tools_tab); _attach_v106(tab); _attach_v107(tab)
+    _attach_v103(tab); _attach_v104(tab, window.creative_tools_tab)
+    _attach_v106(tab); _attach_v107(tab); _attach_v108_sources(tab)
     window.studio_hub_tab = tab
     index = window.tabs.addTab(tab, "✨ Studio IA local")
     tab.open_local_tools.connect(lambda: window.tabs.setCurrentWidget(window.creative_tools_tab))
     window.setup_tab.analysis_done.connect(tab.set_system_info)
     window.setup_tab.analysis_done.connect(lambda _info: tab.planner_v103.refresh())
-    heading = QListWidgetItem("STUDIO IA"); heading.setFlags(Qt.ItemFlag.NoItemFlags)
+    heading = QListWidgetItem("STUDIO IA")
+    heading.setFlags(Qt.ItemFlag.NoItemFlags)
     window.studio_shell.navigation.addItem(heading)
-    item = QListWidgetItem("Studio IA local"); item.setData(Qt.ItemDataRole.UserRole, index)
-    item.setToolTip("Catalogue, Pinokio, installation guidée, poids, stockage et pipelines locaux.")
+    item = QListWidgetItem("Studio IA local")
+    item.setData(Qt.ItemDataRole.UserRole, index)
+    item.setToolTip("Catalogue, Pinokio, Sources+, installation guidée, stockage et pipelines.")
     window.studio_shell.navigation.addItem(item)
     window.studio_shell.entries[index] = (
         item, "Studio IA local",
-        "Explorez vos modèles locaux, le registre Pinokio, les moteurs et vos pipelines.",
+        "Explorez plusieurs écosystèmes IA locaux et préparez votre studio.",
         "STUDIO IA"
     )
+    _attach_termux(window)
     return tab
