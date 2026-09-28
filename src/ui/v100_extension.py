@@ -1,4 +1,4 @@
-"""Branchement isolé du Studio IA v100 à v108."""
+"""Branchement isolé du Studio IA v100 à v109."""
 import html
 from types import MethodType
 
@@ -14,6 +14,7 @@ from src.ui.studio_v104 import PackInstallerPage
 from src.ui.studio_v106 import WeightStoragePage
 from src.ui.studio_v107 import PinokioPage
 from src.ui.studio_v108_sources import ExtraSourcesPage
+from src.ui.studio_v109_universal import UniversalSearchPage
 from src.ui.termux_tab import TermuxTab
 from src.ui.workers import FunctionWorker
 
@@ -71,6 +72,12 @@ def _attach_v108_sources(tab):
     tab.tabs.insertTab(4, page, "Sources+"); tab._v108_sources_attached = True
 
 
+def _attach_v109(tab):
+    if getattr(tab, "_v109_attached", False): return
+    page = UniversalSearchPage(); tab.universal_v109 = page
+    tab.tabs.insertTab(5, page, "Recherche universelle"); tab._v109_attached = True
+
+
 def _attach_termux(window):
     if hasattr(window, "termux_tab"):
         return window.termux_tab
@@ -100,13 +107,13 @@ def install_v100(window):
     if hasattr(window, "studio_hub_tab"):
         tab = window.studio_hub_tab
         _attach_v103(tab); _attach_v104(tab, window.creative_tools_tab)
-        _attach_v106(tab); _attach_v107(tab); _attach_v108_sources(tab)
+        _attach_v106(tab); _attach_v107(tab); _attach_v108_sources(tab); _attach_v109(tab)
         _attach_termux(window)
         return tab
 
     tab = StudioHubTab()
     _attach_v103(tab); _attach_v104(tab, window.creative_tools_tab)
-    _attach_v106(tab); _attach_v107(tab); _attach_v108_sources(tab)
+    _attach_v106(tab); _attach_v107(tab); _attach_v108_sources(tab); _attach_v109(tab)
     window.studio_hub_tab = tab
     index = window.tabs.addTab(tab, "✨ Studio IA local")
     tab.open_local_tools.connect(lambda: window.tabs.setCurrentWidget(window.creative_tools_tab))
@@ -117,11 +124,11 @@ def install_v100(window):
     window.studio_shell.navigation.addItem(heading)
     item = QListWidgetItem("Studio IA local")
     item.setData(Qt.ItemDataRole.UserRole, index)
-    item.setToolTip("Catalogue, Pinokio, Sources+, installation guidée, stockage et pipelines.")
+    item.setToolTip("Recherche universelle, Pinokio, Sources+, installation, stockage et pipelines.")
     window.studio_shell.navigation.addItem(item)
     window.studio_shell.entries[index] = (
         item, "Studio IA local",
-        "Explorez plusieurs écosystèmes IA locaux et préparez votre studio.",
+        "Cherchez simultanément dans plusieurs écosystèmes IA et préparez votre studio local.",
         "STUDIO IA"
     )
     _attach_termux(window)
