@@ -1,4 +1,4 @@
-"""Branchement isolé du Studio IA v100/v101 et correctifs ciblés v102/v103."""
+"""Branchement isolé du Studio IA v100 à v104."""
 import html
 from types import MethodType
 
@@ -9,11 +9,11 @@ from src.backend import model_search as ms
 from src.backend import studio_advisor
 from src.ui.tabs.studio_hub_tab import StudioHubTab
 from src.ui.studio_v103 import StudioPlannerPage
+from src.ui.studio_v104 import PackInstallerPage
 from src.ui.workers import FunctionWorker
 
 
 def _repair_search_tab(window):
-    """Corrige le routage des sources et le chargement des fiches de Recherche."""
     tab = getattr(window, "search_tab", None)
     if tab is None or getattr(tab, "_v102_search_fixed", False):
         return
@@ -57,22 +57,33 @@ def _attach_v103(tab):
     tab._v103_attached = True
 
 
+def _attach_v104(tab, creative_tab):
+    if getattr(tab, "_v104_attached", False):
+        return
+    page = PackInstallerPage(tab, creative_tab)
+    page.open_local_tools.connect(tab.open_local_tools.emit)
+    tab.installer_v104 = page
+    tab.tabs.insertTab(1, page, "Installer un pack")
+    tab._v104_attached = True
+
+
 def install_v100(window):
-    """Ajoute le Studio IA sans renuméroter les 19 onglets historiques."""
     _repair_search_tab(window)
     studio_advisor.extend_catalog()
 
     if hasattr(window, "studio_hub_tab"):
-        _attach_v103(window.studio_hub_tab)
-        return window.studio_hub_tab
+        tab = window.studio_hub_tab
+        _attach_v103(tab)
+        _attach_v104(tab, window.creative_tools_tab)
+        return tab
 
     tab = StudioHubTab()
     _attach_v103(tab)
+    _attach_v104(tab, window.creative_tools_tab)
     window.studio_hub_tab = tab
     index = window.tabs.addTab(tab, "✨ Studio IA local")
     tab.open_local_tools.connect(lambda: window.tabs.setCurrentWidget(window.creative_tools_tab))
     window.setup_tab.analysis_done.connect(tab.set_system_info)
-    # Actualiser aussi Mon Studio dès que l'analyse matérielle change.
     window.setup_tab.analysis_done.connect(lambda _info: tab.planner_v103.refresh())
 
     heading = QListWidgetItem("STUDIO IA")
@@ -80,11 +91,11 @@ def install_v100(window):
     window.studio_shell.navigation.addItem(heading)
     item = QListWidgetItem("Studio IA local")
     item.setData(Qt.ItemDataRole.UserRole, index)
-    item.setToolTip("Catalogue, recommandations, favoris, profils et pipelines 100 % locaux.")
+    item.setToolTip("Catalogue, recommandations, installation guidée, profils et pipelines locaux.")
     window.studio_shell.navigation.addItem(item)
     window.studio_shell.entries[index] = (
         item, "Studio IA local",
-        "Composez un studio adapté à votre matériel et préparez vos pipelines locaux.",
+        "Composez un studio adapté à votre matériel, installez ses moteurs et préparez vos pipelines.",
         "STUDIO IA"
     )
     return tab
