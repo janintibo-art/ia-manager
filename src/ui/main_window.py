@@ -32,6 +32,7 @@ from src.ui.tabs.mobile_tab import MobileTab
 from src.ui.tabs.training_tab import TrainingTab
 from src.ui.tabs.image_studio_tab import ImageStudioTab
 from src.ui.tabs.media_studio_tab import MediaStudioTab
+from src.ui.tabs.creative_tools_tab import CreativeToolsTab
 from src.ui.workers import ChatWorker
 
 SCHEDULER_INTERVAL_MS = 30_000
@@ -69,6 +70,10 @@ class MainWindow(QMainWindow):
         self.training_tab = TrainingTab()
         self.image_studio_tab = ImageStudioTab()
         self.media_studio_tab = MediaStudioTab()
+        self.creative_tools_tab = CreativeToolsTab()
+        self.image_studio_tab.open_tools.connect(lambda: self.tabs.setCurrentWidget(self.creative_tools_tab))
+        self.media_studio_tab.open_tools.connect(lambda: self.tabs.setCurrentWidget(self.creative_tools_tab))
+        self.creative_tools_tab.engine_started.connect(self.connect_creative_engine)
         self.training_tab.models_changed.connect(self.on_models_changed)
         self.tutorial_tab.open_tab.connect(self.open_named_tab)
         self.workspace_tab.apply_profile.connect(self.apply_work_profile)
@@ -93,6 +98,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.training_tab, "🧬 Entraîner / Fusionner")
         self.tabs.addTab(self.image_studio_tab, "🎨 Création d’images")
         self.tabs.addTab(self.media_studio_tab, "🎵 Audio · Vidéo · 3D")
+        self.tabs.addTab(self.creative_tools_tab, "🛠️ Outils locaux")
 
         # Modèles installés ou supprimés : tous les onglets se mettent à jour
         self.setup_tab.models_changed.connect(self.on_models_changed)
@@ -135,6 +141,23 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.studio_shell)
 
     # ------------------------------------------------------------ liens entre onglets
+    def connect_creative_engine(self, key, url):
+        if key == 'comfyui':
+            self.image_studio_tab.url.setText(url)
+            settings.set('image_comfy_url', url)
+        model_ids = {'comfyui': ('wan21', 'ltx-video'),
+                     'audiocraft': ('musicgen-small', 'musicgen-melody', 'audiogen'),
+                     'triposr': ('triposr',), 'hunyuan3d': ('hunyuan3d',)}.get(key, ())
+        panel = self.media_studio_tab
+        for model_id in model_ids:
+            record = panel.profiles.get(model_id)
+            record = dict(record) if isinstance(record, dict) else {}
+            record['url'] = url
+            panel.profiles[model_id] = record
+        if panel.current_model and panel.current_model['id'] in model_ids:
+            panel.address.setText(url)
+        panel.flush()
+
     def on_models_changed(self):
         self.models_tab.refresh_installed_models()
         self.chat_tab.refresh_models()
@@ -296,6 +319,7 @@ class MainWindow(QMainWindow):
                             "Vos tâches planifiées continuent. Clic droit sur l'icône pour quitter.")
                 self.tray_hint_shown = True
             return
+        self.creative_tools_tab.shutdown()
         self.media_studio_tab.shutdown()
         self.training_tab.shutdown()
         self.mobile_tab.shutdown()

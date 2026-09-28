@@ -24,6 +24,7 @@ SECTIONS = (
     ("PILOTER", ((0, "Analyse", "Faites le point sur votre matériel et votre installation."),
                   (6, "Tableau de bord", "Gardez une vue d’ensemble de votre atelier."),
                   (8, "Tâches", "Organisez vos générations et leurs résultats."),
+                  (18, "Outils locaux", "Installez et démarrez vos moteurs de création sur ce PC."),
                   (9, "Connexions", "Configurez vos moteurs locaux et vos services API."),
                   (10, "GitHub", "Retrouvez les outils de gestion de vos dépôts."),
                   (11, "Obliteratus", "Accédez à votre atelier spécialisé et à son journal."),

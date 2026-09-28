@@ -1,7 +1,7 @@
 """Catalogue musique, sons, vidéo et 3D, avec accès aux outils externes."""
 import html
 from pathlib import Path
-from PyQt6.QtCore import Qt, QTimer, QUrl
+from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QComboBox, QCheckBox, QLineEdit, QListWidget, QListWidgetItem, QTextBrowser, QPlainTextEdit,
@@ -11,6 +11,7 @@ from src.backend.local_creation import validate_engine_url, LOCAL_HELP
 
 
 class MediaStudioTab(QWidget):
+    open_tools = pyqtSignal()
     def __init__(self):
         super().__init__()
         saved = settings.get('media_studio_profiles')
@@ -25,6 +26,9 @@ class MediaStudioTab(QWidget):
                        'Tous ces modèles disposent d’une exécution sur PC. Téléchargement initial nécessaire ; génération dans leur moteur installé.')
         intro.setWordWrap(True)
         root.addWidget(intro)
+        tools_button = QPushButton("Installer / démarrer les outils locaux")
+        tools_button.clicked.connect(self.open_tools.emit)
+        root.addWidget(tools_button)
         self.local_only = QCheckBox('100 % local — ouvrir uniquement les moteurs sur ce PC')
         self.local_only.setChecked(settings.get('media_local_only') is not False)
         self.local_only.toggled.connect(lambda value: settings.set('media_local_only', value))

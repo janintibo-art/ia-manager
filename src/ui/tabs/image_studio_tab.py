@@ -13,6 +13,7 @@ from src.backend.local_creation import LOCAL_HELP
 
 
 class ImageStudioTab(QWidget):
+    open_tools = pyqtSignal()
     result_ready = pyqtSignal(str, object)
     failed = pyqtSignal(str)
     progress = pyqtSignal(str)
@@ -32,6 +33,9 @@ class ImageStudioTab(QWidget):
                        "ComfyUI doit être installé et lancé sur le PC. Les modèles de vision du chat servent à analyser les images.")
         intro.setWordWrap(True)
         root.addWidget(intro)
+        tools_button = QPushButton("Installer / démarrer les outils locaux")
+        tools_button.clicked.connect(self.open_tools.emit)
+        root.addWidget(tools_button)
         self.local_only = QCheckBox('100 % local — utiliser uniquement un moteur sur ce PC')
         self.local_only.setChecked(settings.get('image_local_only') is not False)
         self.local_only.setToolTip(LOCAL_HELP)
