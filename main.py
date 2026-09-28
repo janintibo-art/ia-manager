@@ -16,6 +16,7 @@ from src.backend import settings, storage
 from src.ui import style
 from src.ui.branding import asset
 from src.ui.main_window import MainWindow
+from src.ui.v100_extension import install_v100
 
 LOG_FILE = Path.home() / ".ia_manager" / "erreurs.log"
 
@@ -57,6 +58,7 @@ def main():
     app.setStyleSheet(style.build_stylesheet())
 
     window = MainWindow()
+    install_v100(window)
     window.show()
 
     sys.exit(app.exec())
