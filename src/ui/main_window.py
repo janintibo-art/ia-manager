@@ -98,6 +98,8 @@ class MainWindow(QMainWindow):
         self.setup_tab.analysis_done.connect(self.search_tab.set_system_info)
         self.setup_tab.analysis_done.connect(self.chat_tab.set_system_info)
         self.setup_tab.analysis_done.connect(self.bench_tab.set_system_info)
+        self.setup_tab.analysis_done.connect(self.training_tab.set_system_info)
+        self.training_tab.analyze_requested.connect(self.setup_tab.analyze_system)
         self.tabs.currentChanged.connect(self.on_tab_changed)
         self.search_tab.models_changed.connect(self.on_models_changed)
         self.dashboard_tab.models_changed.connect(self.on_models_changed)

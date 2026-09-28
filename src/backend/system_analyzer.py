@@ -98,8 +98,10 @@ class SystemAnalyzer:
     """Analyser les capacités du système"""
 
     @staticmethod
-    def get_system_info() -> Dict:
+    def get_system_info(refresh: bool = False) -> Dict:
         """Obtenir les informations système"""
+        if refresh:
+            detect_gpu.cache_clear()
         gpu = detect_gpu()
         mem = psutil.virtual_memory()
 

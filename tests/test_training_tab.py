@@ -42,3 +42,20 @@ class TrainingTabTests(unittest.TestCase):
     def test_missing_interpreter_releases_queue(self):
         status, _ = self.run_process('/nonexistent-ia-training-python', [])
         self.assertIn('échec', status)
+
+    def test_hardware_update_preserves_user_choice(self):
+        tab = TrainingTab()
+        info = dict(cpu='i9', gpu_type='RTX', gpu_vendor='NVIDIA', vram_exact=True,
+                    vram_gb=12, ram_gb=32, ram_available_gb=24)
+        tab.set_system_info(info)
+        self.assertEqual(tab.model.text(), 'Qwen/Qwen2.5-3B-Instruct')
+        tab.model.setText('my/custom-model')
+        tab.mark_model_edited()
+        info.update(vram_gb=48, ram_gb=64)
+        tab.set_system_info(info)
+        self.assertEqual(tab.model.text(), 'my/custom-model')
+        self.assertIn('14B', tab.apply_recommended.text())
+        tab.apply_recommendation()
+        self.assertEqual(tab.model.text(), 'Qwen/Qwen2.5-14B-Instruct')
+        self.assertEqual(tab.tuning()['context'], 2048)
+        tab.deleteLater()

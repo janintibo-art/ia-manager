@@ -250,7 +250,8 @@ class SetupTab(QWidget):
 
     def analyze_system(self):
         try:
-            info = self.analyzer.get_system_info()
+            info = self.analyzer.get_system_info(refresh=True)
+            self.allocator._gpu = None
         except Exception as e:
             self.verdict.setText(f"❌ Analyse impossible : {e}")
             return

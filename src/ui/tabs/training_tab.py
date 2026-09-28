@@ -9,15 +9,18 @@ from PyQt6.QtCore import QProcess, QProcessEnvironment, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QFormLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QFileDialog, QSpinBox, QDoubleSpinBox,
-    QPlainTextEdit, QMessageBox, QTabWidget)
-from src.backend import training_lab as lab, settings, local_jobs
+    QPlainTextEdit, QMessageBox, QTabWidget, QComboBox, QScrollArea)
+from src.backend import training_lab as lab, training_resources as resources, settings, local_jobs
 
 
 class TrainingTab(QWidget):
     models_changed = pyqtSignal()
+    analyze_requested = pyqtSignal()
 
     def __init__(self):
         super().__init__()
+        self.system_info = None
+        self.model_edited = False
         self.process = None
         self.token = None
         self.job = None
@@ -30,6 +33,18 @@ class TrainingTab(QWidget):
                        'Les modèles originaux restent intacts. Fermez les modèles Ollama chargés avant un entraînement.')
         intro.setWordWrap(True)
         layout.addWidget(intro)
+        self.hardware_label = QLabel('Matériel : en attente de l’analyse du PC.')
+        self.hardware_label.setWordWrap(True)
+        layout.addWidget(self.hardware_label)
+        hardware_buttons = QHBoxLayout()
+        refresh = QPushButton('Actualiser le matériel')
+        refresh.clicked.connect(self.analyze_requested.emit)
+        self.apply_recommended = QPushButton('Appliquer le profil conseillé')
+        self.apply_recommended.setEnabled(False)
+        self.apply_recommended.clicked.connect(self.apply_recommendation)
+        hardware_buttons.addWidget(refresh)
+        hardware_buttons.addWidget(self.apply_recommended)
+        layout.addLayout(hardware_buttons)
         form = QFormLayout()
         self.python = QLineEdit(str(settings.get('training_python') or ''))
         self.python.setPlaceholderText('Python de votre environnement Unsloth / MergeKit (python.exe)')
@@ -50,10 +65,26 @@ class TrainingTab(QWidget):
         for b in (diagnostic, help_button, merge_help): buttons.addWidget(b)
         layout.addLayout(buttons)
         pages = QTabWidget()
-        layout.addWidget(pages)
+        layout.addWidget(pages, 3)
+        def scroll_page(widget):
+            area = QScrollArea()
+            area.setWidgetResizable(True)
+            area.setWidget(widget)
+            return area
         train = QWidget()
         f = QFormLayout(train)
+        self.profiles = QComboBox()
+        for profile in resources.PROFILES:
+            self.profiles.addItem(profile['label'], profile)
+        self.profiles.setCurrentIndex(1)
+        apply_profile = QPushButton('Utiliser ce profil')
+        apply_profile.clicked.connect(lambda: self.apply_profile(self.profiles.currentData()))
+        profile_row = QHBoxLayout()
+        profile_row.addWidget(self.profiles)
+        profile_row.addWidget(apply_profile)
+        f.addRow('Profils de départ', profile_row)
         self.model = QLineEdit('Qwen/Qwen2.5-3B-Instruct')
+        self.model.textEdited.connect(self.mark_model_edited)
         f.addRow('Modèle Hugging Face / dossier', self.model)
         self.dataset = QLineEdit()
         row = QHBoxLayout()
@@ -65,15 +96,37 @@ class TrainingTab(QWidget):
         self.epochs = QSpinBox()
         self.epochs.setRange(1, 3)
         f.addRow('Passages sur les exemples', self.epochs)
-        text = QLabel('Profil prudent : QLoRA 4 bits, rang 8, contexte 1024, lot 1. '
+        self.context = QComboBox()
+        self.rank = QComboBox()
+        self.batch = QComboBox()
+        for widget, values, default in ((self.context, (512,1024,2048,4096), 1024),
+                                        (self.rank, (4,8,16,32), 8), (self.batch, (1,2,4), 1)):
+            for value in values: widget.addItem(str(value), value)
+            widget.setCurrentIndex(widget.findData(default))
+        f.addRow('Contexte (tokens)', self.context)
+        f.addRow('Rang LoRA', self.rank)
+        f.addRow('Exemples simultanés (lot)', self.batch)
+        self.budget = QLabel()
+        self.budget.setWordWrap(True)
+        f.addRow(self.budget)
+        self.model.textChanged.connect(self.update_budget)
+        for widget in (self.context, self.rank, self.batch):
+            widget.currentIndexChanged.connect(self.update_budget)
+            widget.activated.connect(self.mark_model_edited)
+        text = QLabel('QLoRA 4 bits. Les réglages ci-dessus sont transmis au moteur. '
                       '20 % des exemples réservés à l’évaluation. Minimum 10 exemples distincts ; '
                       'plusieurs centaines de bons exemples sont préférables. La RAM ne remplace pas la VRAM pour l’entraînement.')
         text.setWordWrap(True)
         f.addRow(text)
         start = QPushButton('Entraîner et exporter')
         start.clicked.connect(lambda: self.launch('train'))
-        f.addRow(start)
-        pages.addTab(train, 'Entraînement')
+        trial = QPushButton('Essai court · 2 étapes')
+        trial.clicked.connect(lambda: self.launch('trial'))
+        train_buttons = QHBoxLayout()
+        train_buttons.addWidget(trial)
+        train_buttons.addWidget(start)
+        f.addRow(train_buttons)
+        pages.addTab(scroll_page(train), 'Entraînement')
         merge = QWidget()
         f = QFormLayout(merge)
         self.model_a = QLineEdit()
@@ -85,6 +138,11 @@ class TrainingTab(QWidget):
         self.weight.setSingleStep(.05)
         self.weight.setValue(.5)
         f.addRow('Part du modèle B (0,5 = moitié)', self.weight)
+        self.merge_budget = QLabel('Fusion CPU : le diagnostic CUDA n’est pas une condition nécessaire.')
+        self.merge_budget.setWordWrap(True)
+        f.addRow(self.merge_budget)
+        self.model_a.textChanged.connect(self.update_merge_budget)
+        self.model_b.textChanged.connect(self.update_merge_budget)
         text = QLabel('Fusion linéaire sur CPU/RAM avec MergeKit. Deux variantes issues du même modèle de base, '
                       'poids Safetensors non quantifiés. Architectures et vocabulaires vérifiés avant fusion ; '
                       'cette vérification ne garantit pas la qualité. Ne fusionne pas directement les modèles GGUF d’Ollama. '
@@ -94,7 +152,7 @@ class TrainingTab(QWidget):
         start_merge = QPushButton('Vérifier et fusionner')
         start_merge.clicked.connect(lambda: self.launch('merge'))
         f.addRow(start_merge)
-        pages.addTab(merge, 'Fusion')
+        pages.addTab(scroll_page(merge), 'Fusion')
         export = QWidget()
         f = QFormLayout(export)
         self.export_folder = QLineEdit()
@@ -114,7 +172,7 @@ class TrainingTab(QWidget):
         imp = QPushButton('Importer dans Ollama')
         imp.clicked.connect(self.import_model)
         f.addRow(imp)
-        pages.addTab(export, 'Ollama')
+        pages.addTab(scroll_page(export), 'Ollama')
         guide = QPlainTextEdit()
         guide.setReadOnly(True)
         guide.setPlainText('DÉMARRAGE\n1. Installer un environnement Unsloth Windows selon le guide officiel (bouton ci-dessus). '
@@ -136,6 +194,19 @@ class TrainingTab(QWidget):
             'les exemples ne sont pas téléversés par cet atelier.\n'
             'La fermeture de l’application arrête la tâche. Une tâche interrompue reste marquée incomplète ; '
             'il n’y a pas de reprise automatique dans cette version.')
+        guide.appendPlainText('\n\nMATÉRIEL ÉVOLUTIF (v91)\n'
+            'L’analyse commune du PC alimente cet atelier. Actualiser le matériel refait la détection du GPU. '
+            'Le profil conseillé est une estimation prudente sur un seul GPU, pas une addition RAM + VRAM. '
+            'Il tient compte de la RAM totale pour l’export. Les réglages déjà modifiés ne sont pas remplacés lors d’une nouvelle analyse : '
+            'utiliser Appliquer le profil conseillé. Les budgets affichés sont indicatifs et non des minima universels.\n'
+            'Le moteur relit la VRAM libre de son GPU CUDA avant chaque tâche et enregistre hardware.json. '
+            'Cela peut différer de la première carte vue par Windows si CUDA_VISIBLE_DEVICES est configuré. '
+            'Un essai de deux étapes effectue réellement des calculs, sans sauvegarder de modèle final. '
+            'Il mesure la VRAM allouée/réservée par PyTorch, pas toute la consommation du PC, et ne garantit pas l’export complet. '
+            'Choisir des exemples représentatifs. Sur un modèle personnalisé, le budget est inconnu.\n'
+            'Sur une machine sans NVIDIA/CUDA, la fusion CPU reste accessible ; cet atelier QLoRA utilise actuellement CUDA. '
+            'Sur plusieurs GPU, les mémoires ne sont pas additionnées : entraînement sur le GPU CUDA 0 du moteur. '
+            'Réduire d’abord le lot, le contexte ou le modèle si la mémoire manque.')
         pages.addTab(guide, 'Guide')
         self.status = QLabel('Prêt — commencez par le moteur Python et le diagnostic.')
         self.status.setWordWrap(True)
@@ -153,6 +224,60 @@ class TrainingTab(QWidget):
         row.addWidget(self.stop)
         row.addWidget(open_folder)
         layout.addLayout(row)
+        self.update_budget()
+
+    def tuning(self):
+        return dict(context=self.context.currentData(), rank=self.rank.currentData(), batch=self.batch.currentData())
+
+    def mark_model_edited(self, *_):
+        self.model_edited = True
+
+    def set_system_info(self, info):
+        self.system_info = dict(info)
+        exact = '' if info.get('vram_exact') else ' (valeur incertaine)'
+        self.hardware_label.setText(
+            f"{info.get('cpu', 'CPU inconnu')} · {info.get('gpu_type', 'GPU inconnu')} · "
+            f"VRAM {resources.number(info.get('vram_gb')):.1f} Go{exact} · "
+            f"RAM {resources.number(info.get('ram_gb')):.1f} Go "
+            f"({resources.number(info.get('ram_available_gb')):.1f} Go libres à l’analyse).")
+        suggested = resources.recommend(info)
+        self.apply_recommended.setEnabled(suggested is not None)
+        self.apply_recommended.setText('Conseillé : '+suggested['label'] if suggested else 'Profil automatique indisponible — diagnostic requis')
+        # Ne jamais écraser des choix utilisateur après un changement matériel.
+        if suggested and not self.model_edited and self.process is None:
+            self.apply_profile(suggested)
+        self.update_budget()
+        self.update_merge_budget()
+
+    def apply_recommendation(self):
+        profile = resources.recommend(self.system_info)
+        if profile: self.apply_profile(profile)
+
+    def apply_profile(self, profile):
+        if self.process is not None or not profile: return
+        self.model_edited = True
+        self.model.setText(profile['model'])
+        for widget, key in ((self.context, 'context'), (self.rank, 'rank'), (self.batch, 'batch')):
+            widget.setCurrentIndex(widget.findData(profile[key]))
+        index = next((i for i,p in enumerate(resources.PROFILES) if p['model'] == profile['model']), -1)
+        if index >= 0: self.profiles.setCurrentIndex(index)
+        self.update_budget()
+
+    def update_budget(self, *_):
+        message = resources.advisory(self.system_info, self.model.text(), **self.tuning())
+        try: message += f" Disque de sortie : {resources.disk_free(lab.lab_root()):.1f} Go libres."
+        except OSError: message += ' Espace disque non mesuré.'
+        self.budget.setText(message)
+
+    def update_merge_budget(self, *_):
+        req = resources.requirements(self.model_a.text(), action='merge')
+        available = resources.number((self.system_info or {}).get('ram_available_gb'))
+        if req:
+            message = f"Fusion CPU : budget indicatif RAM {req['ram_gb']:.0f} Go / disque {req['disk_gb']:.0f} Go pour deux modèles de cette taille."
+        else:
+            message = 'Fusion CPU : budget inconnu pour ces modèles personnalisés ; dépend de la taille des poids et des tenseurs.'
+        if self.system_info: message += f' RAM libre à l’analyse : {available:.1f} Go.'
+        self.merge_budget.setText(message)
 
     def choose_python(self):
         path, _ = QFileDialog.getOpenFileName(self, 'Python de l’environnement ML')
@@ -178,8 +303,9 @@ class TrainingTab(QWidget):
             if not python.is_file() or 'ia_manager' in python.name.lower():
                 raise ValueError('Sélectionnez le vrai python.exe de l’environnement ML.')
             settings.set('training_python', str(python))
-            job = lab.create_job(action, self.model.text() if action == 'train' else self.model_a.text(),
-                self.model_b.text(), self.dataset.text(), self.epochs.value(), self.weight.value())
+            job = lab.create_job(action, self.model.text() if action in ('train', 'trial') else self.model_a.text(),
+                self.model_b.text(), self.dataset.text(), self.epochs.value(), self.weight.value(),
+                tuning=self.tuning(), hardware=self.system_info)
             self.start_process(str(python), ['-u', str(job/'runner.py'), str(job)], job)
         except Exception as exc:
             self.status.setText(str(exc))
@@ -246,6 +372,19 @@ class TrainingTab(QWidget):
         self.read_output()
         success = not self.cancelled and code == 0 and status == QProcess.ExitStatus.NormalExit
         self.status.setText('Terminé.' if success else 'Arrêté ou en échec — consultez le journal. Les fichiers partiels sont conservés.')
+        if success and (self.job/'trial.json').is_file():
+            try:
+                result = json.loads((self.job/'trial.json').read_text(encoding='utf-8'))
+                self.status.setText(f"Essai réussi · pic PyTorch {result['peak_allocated_gb']:.2f} Go alloués / "
+                    f"{result['peak_reserved_gb']:.2f} Go réservés. Export complet non testé.")
+            except (OSError, ValueError, KeyError): pass
+        if success and (self.job/'hardware.json').is_file() and not (self.job/'trial.json').is_file():
+            try:
+                data = json.loads((self.job/'hardware.json').read_text(encoding='utf-8'))
+                if (self.job/'SUCCESS').read_text() == 'diagnostic':
+                    self.status.setText('Diagnostic terminé · '+('CUDA disponible.' if data.get('cuda') else
+                        'CUDA indisponible : entraînement impossible dans ce moteur ; fusion CPU possible si MergeKit est installé.'))
+            except (OSError, ValueError, KeyError): pass
         if success and (self.job/'model').is_dir():
             self.export_folder.setText(str(self.job/'model'))
         if success and self.importing: self.models_changed.emit()
