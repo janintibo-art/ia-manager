@@ -13,6 +13,7 @@ from src.ui.branding import asset
 SECTIONS = (
     ("CRÉER", ((4, "Chat", "Échangez avec vos modèles et donnez forme à vos idées."),
                 (16, "Création d’images", "Choisissez un modèle et créez vos images avec ComfyUI."),
+                (17, "Audio · Vidéo · 3D", "Découvrez les modèles et retrouvez vos outils de création."),
                 (3, "Projets", "Retrouvez vos consignes, fichiers et conversations."),
                 (15, "Entraîner / Fusionner", "Spécialisez vos modèles et fusionnez des variantes compatibles."),
                 (12, "Espace de travail", "Préparez vos documents, profils et essais."))),
