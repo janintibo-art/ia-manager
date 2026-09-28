@@ -1,5 +1,5 @@
 
-"""Branchement isolé du Studio IA v100 à v114."""
+"""Branchement isolé du Studio IA v100 à v115."""
 import html
 from types import MethodType
 from PyQt6.QtCore import Qt
@@ -18,6 +18,7 @@ from src.ui.studio_v111_blender import BlenderStudioPage
 from src.ui.studio_v112_game_ready import BlenderGameReadyPage
 from src.ui.studio_v113_animation import BlenderAnimationPage
 from src.ui.studio_v114_mapping import RigMappingClipsPage
+from src.ui.studio_v115_library import AnimationLibraryPage
 from src.ui.termux_tab import TermuxTab
 from src.ui.workers import FunctionWorker
 
@@ -62,19 +63,22 @@ def _attach_v113(tab):
 def _attach_v114(tab):
     if getattr(tab,'_v114_mapping_attached',False):return
     page=RigMappingClipsPage(tab.blender_v111); tab.mapping_v114=page; tab.tabs.insertTab(5,page,'Rig Mapping & Clips'); tab._v114_mapping_attached=True; QApplication.instance().aboutToQuit.connect(page.shutdown)
+def _attach_v115(tab):
+    if getattr(tab,'_v115_library_attached',False):return
+    page=AnimationLibraryPage(tab.blender_v111,tab.mapping_v114); tab.library_v115=page; tab.tabs.insertTab(6,page,'Bibliothèque animations'); tab._v115_library_attached=True; QApplication.instance().aboutToQuit.connect(page.shutdown)
 def _attach_v106(tab):
     if getattr(tab,'_v106_attached',False):return
-    page=WeightStoragePage(tab); tab.weights_v106=page; tab.tabs.insertTab(6,page,'Poids & stockage'); tab._v106_attached=True
+    page=WeightStoragePage(tab); tab.weights_v106=page; tab.tabs.insertTab(7,page,'Poids & stockage'); tab._v106_attached=True
 def _attach_v107(tab):
     if getattr(tab,'_v107_attached',False):return
-    page=PinokioPage(); tab.pinokio_v107=page; tab.tabs.insertTab(7,page,'Pinokio'); tab._v107_attached=True
+    page=PinokioPage(); tab.pinokio_v107=page; tab.tabs.insertTab(8,page,'Pinokio'); tab._v107_attached=True
 def _attach_v108_sources(tab):
     if getattr(tab,'_v108_sources_attached',False):return
-    page=ExtraSourcesPage(); tab.sources_v108=page; tab.tabs.insertTab(8,page,'Sources+'); tab._v108_sources_attached=True
+    page=ExtraSourcesPage(); tab.sources_v108=page; tab.tabs.insertTab(9,page,'Sources+'); tab._v108_sources_attached=True
 def _attach_v109(tab,window):
     if getattr(tab,'_v109_attached',False):return
     page=UniversalSearchPage(); page.open_search_result.connect(lambda source,query:_open_search_result(window,source,query)); page.open_pinokio.connect(lambda query:_open_pinokio_result(tab,query))
-    tab.universal_v109=page; tab.tabs.insertTab(9,page,'Recherche universelle'); tab._v109_attached=True
+    tab.universal_v109=page; tab.tabs.insertTab(10,page,'Recherche universelle'); tab._v109_attached=True
 
 def _attach_termux(window):
     if hasattr(window,'termux_tab'):return window.termux_tab
@@ -88,13 +92,13 @@ def install_v100(window):
     _repair_search_tab(window); studio_advisor.extend_catalog(); extend_packs_v105(); extend_packs_v111()
     if hasattr(window,'studio_hub_tab'):
         tab=window.studio_hub_tab
-        _attach_v103(tab); _attach_v104(tab,window.creative_tools_tab); _attach_v111(tab); _attach_v112(tab); _attach_v113(tab); _attach_v114(tab); _attach_v106(tab); _attach_v107(tab); _attach_v108_sources(tab); _attach_v109(tab,window); _attach_termux(window)
+        _attach_v103(tab); _attach_v104(tab,window.creative_tools_tab); _attach_v111(tab); _attach_v112(tab); _attach_v113(tab); _attach_v114(tab); _attach_v115(tab); _attach_v106(tab); _attach_v107(tab); _attach_v108_sources(tab); _attach_v109(tab,window); _attach_termux(window)
         return tab
     tab=StudioHubTab()
-    _attach_v103(tab); _attach_v104(tab,window.creative_tools_tab); _attach_v111(tab); _attach_v112(tab); _attach_v113(tab); _attach_v114(tab); _attach_v106(tab); _attach_v107(tab); _attach_v108_sources(tab); _attach_v109(tab,window)
+    _attach_v103(tab); _attach_v104(tab,window.creative_tools_tab); _attach_v111(tab); _attach_v112(tab); _attach_v113(tab); _attach_v114(tab); _attach_v115(tab); _attach_v106(tab); _attach_v107(tab); _attach_v108_sources(tab); _attach_v109(tab,window)
     window.studio_hub_tab=tab; index=window.tabs.addTab(tab,'✨ Studio IA local')
     tab.open_local_tools.connect(lambda:window.tabs.setCurrentWidget(window.creative_tools_tab)); window.setup_tab.analysis_done.connect(tab.set_system_info); window.setup_tab.analysis_done.connect(lambda _info:tab.planner_v103.refresh())
     heading=QListWidgetItem('STUDIO IA'); heading.setFlags(Qt.ItemFlag.NoItemFlags); window.studio_shell.navigation.addItem(heading)
-    item=QListWidgetItem('Studio IA local'); item.setData(Qt.ItemDataRole.UserRole,index); item.setToolTip('Blender, mapping de rig, clips, animations, recherche et stockage.'); window.studio_shell.navigation.addItem(item)
-    window.studio_shell.entries[index]=(item,'Studio IA local','Animez, retargetez et découpez vos personnages 3D avant export jeu.','STUDIO IA')
+    item=QListWidgetItem('Studio IA local'); item.setData(Qt.ItemDataRole.UserRole,index); item.setToolTip('Bibliothèque animations, Blender, retargeting, recherche et stockage.'); window.studio_shell.navigation.addItem(item)
+    window.studio_shell.entries[index]=(item,'Studio IA local','Indexez, classez, prévisualisez et appliquez vos animations 3D.','STUDIO IA')
     _attach_termux(window); return tab
