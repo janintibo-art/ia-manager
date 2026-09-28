@@ -17,6 +17,7 @@ from src.ui import style
 from src.ui.branding import asset
 from src.ui.main_window import MainWindow
 from src.ui.v100_extension import install_v100
+from src.ui.v120_extension import install_v120
 
 LOG_FILE = Path.home() / ".ia_manager" / "erreurs.log"
 
@@ -51,7 +52,6 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName("IA Manager")
     app.setWindowIcon(QIcon(str(asset("ia_manager_icon.png"))))
-    # La fenêtre peut être réduite près de l'horloge (tâches planifiées) : on quitte explicitement
     app.setQuitOnLastWindowClosed(False)
     style.apply_theme(settings.get("theme") or "sombre", settings.get("font_size") or 13)
     app.setFont(QFont("Segoe UI", style.BASE_FONT_PT))
@@ -59,6 +59,7 @@ def main():
 
     window = MainWindow()
     install_v100(window)
+    install_v120(window)
     window.show()
 
     sys.exit(app.exec())
