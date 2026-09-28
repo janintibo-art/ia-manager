@@ -1,4 +1,4 @@
-"""Branchement isolé du Studio IA v100 à v106."""
+"""Branchement isolé du Studio IA v100 à v107."""
 import html
 from types import MethodType
 
@@ -12,6 +12,7 @@ from src.ui.tabs.studio_hub_tab import StudioHubTab
 from src.ui.studio_v103 import StudioPlannerPage
 from src.ui.studio_v104 import PackInstallerPage
 from src.ui.studio_v106 import WeightStoragePage
+from src.ui.studio_v107 import PinokioPage
 from src.ui.workers import FunctionWorker
 
 
@@ -52,10 +53,14 @@ def _attach_v104(tab, creative_tab):
 
 def _attach_v106(tab):
     if getattr(tab, "_v106_attached", False): return
-    page = WeightStoragePage(tab)
-    tab.weights_v106 = page
-    tab.tabs.insertTab(2, page, "Poids & stockage")
-    tab._v106_attached = True
+    page = WeightStoragePage(tab); tab.weights_v106 = page
+    tab.tabs.insertTab(2, page, "Poids & stockage"); tab._v106_attached = True
+
+
+def _attach_v107(tab):
+    if getattr(tab, "_v107_attached", False): return
+    page = PinokioPage(); tab.pinokio_v107 = page
+    tab.tabs.insertTab(3, page, "Pinokio"); tab._v107_attached = True
 
 
 def install_v100(window):
@@ -64,10 +69,10 @@ def install_v100(window):
     extend_packs_v105()
     if hasattr(window, "studio_hub_tab"):
         tab = window.studio_hub_tab
-        _attach_v103(tab); _attach_v104(tab, window.creative_tools_tab); _attach_v106(tab)
+        _attach_v103(tab); _attach_v104(tab, window.creative_tools_tab); _attach_v106(tab); _attach_v107(tab)
         return tab
     tab = StudioHubTab()
-    _attach_v103(tab); _attach_v104(tab, window.creative_tools_tab); _attach_v106(tab)
+    _attach_v103(tab); _attach_v104(tab, window.creative_tools_tab); _attach_v106(tab); _attach_v107(tab)
     window.studio_hub_tab = tab
     index = window.tabs.addTab(tab, "✨ Studio IA local")
     tab.open_local_tools.connect(lambda: window.tabs.setCurrentWidget(window.creative_tools_tab))
@@ -76,11 +81,11 @@ def install_v100(window):
     heading = QListWidgetItem("STUDIO IA"); heading.setFlags(Qt.ItemFlag.NoItemFlags)
     window.studio_shell.navigation.addItem(heading)
     item = QListWidgetItem("Studio IA local"); item.setData(Qt.ItemDataRole.UserRole, index)
-    item.setToolTip("Catalogue, installation guidée, poids, stockage, profils et pipelines locaux.")
+    item.setToolTip("Catalogue, Pinokio, installation guidée, poids, stockage et pipelines locaux.")
     window.studio_shell.navigation.addItem(item)
     window.studio_shell.entries[index] = (
         item, "Studio IA local",
-        "Composez votre studio, installez ses moteurs et contrôlez où sont stockés les modèles.",
+        "Explorez vos modèles locaux, le registre Pinokio, les moteurs et vos pipelines.",
         "STUDIO IA"
     )
     return tab
