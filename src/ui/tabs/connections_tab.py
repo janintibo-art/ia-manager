@@ -1,6 +1,7 @@
 """Onglet Connexions - Claude, ChatGPT, serveurs compatibles, ajout manuel de modèles"""
 
 from typing import Dict, List, Optional
+from pathlib import Path
 
 from PyQt6.QtCore import Qt, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
@@ -164,14 +165,17 @@ class ConnectionsTab(QWidget):
         box, lay = card("💽  Emplacement des modèles et sauvegardes",
                         "Choisissez un dossier sur D: (ou un autre disque). Copiez vos données existantes "
                         "avant de changer leur emplacement. Les originaux restent en place.")
-        location = QHBoxLayout()
+        self.choose_storage_button = QPushButton("📂 Choisir le dossier de stockage…")
+        self.choose_storage_button.setObjectName("Primary")
+        self.choose_storage_button.setToolTip("Parcourir les disques et sélectionner ou créer un dossier.")
+        self.choose_storage_button.clicked.connect(self.browse_storage)
+        lay.addWidget(self.choose_storage_button)
         self.storage_path = QLineEdit(str(storage.root() or ""))
-        self.storage_path.setPlaceholderText("D:\\IA Manager")
-        location.addWidget(self.storage_path, 1)
-        browse_storage = QPushButton("Parcourir…")
-        browse_storage.clicked.connect(self.browse_storage)
-        location.addWidget(browse_storage)
-        lay.addLayout(location)
+        self.storage_path.setReadOnly(True)
+        self.storage_path.setAccessibleName("Dossier de stockage sélectionné")
+        self.storage_path.setPlaceholderText("Aucun dossier choisi — cliquez sur le bouton ci-dessus")
+        self.storage_path.setToolTip("Chemin du dossier choisi dans l’explorateur. Vous pouvez le sélectionner et le copier.")
+        lay.addWidget(self.storage_path)
         self.move_storage_button = QPushButton("📦 Copier les données et utiliser ce dossier")
         self.move_storage_button.setObjectName("Primary")
         self.move_storage_button.clicked.connect(self.move_storage)
@@ -368,10 +372,19 @@ class ConnectionsTab(QWidget):
         root.addStretch()
 
     def browse_storage(self):
-        folder = QFileDialog.getExistingDirectory(self, "Choisir le disque et le dossier",
-                                                   self.storage_path.text() or str(storage.root() or "D:\\"))
+        current = self.storage_path.text().strip()
+        initial = Path(current).expanduser() if current else (storage.root() or Path.home())
+        # Un disque retiré ou un ancien chemin ne doit pas bloquer l'explorateur.
+        if not initial.is_dir():
+            initial = Path.home()
+        folder = QFileDialog.getExistingDirectory(
+            self, "Choisir le dossier de stockage", str(initial),
+            QFileDialog.Option.ShowDirsOnly)
         if folder:
-            self.storage_path.setText(folder)
+            self.storage_path.setText(str(Path(folder)))
+            self.storage_path.setToolTip(str(Path(folder)))
+            self.storage_status.setText("Dossier sélectionné : " + str(Path(folder)) +
+                "\nCliquez sur « Copier les données et utiliser ce dossier » pour appliquer ce choix.")
 
     def move_storage(self):
         try:
@@ -399,6 +412,7 @@ class ConnectionsTab(QWidget):
             self.storage_status.setText("❌ " + str(error))
             return
         self.move_storage_button.setEnabled(False)
+        self.choose_storage_button.setEnabled(False)
         self.storage_status.setText("⏳ Copie en cours. Vous pouvez continuer à utiliser l'application.")
         self.storage_worker = FunctionWorker(self._copy_storage, destination, plan)
         self.storage_worker.done.connect(self.storage_moved)
@@ -418,6 +432,7 @@ class ConnectionsTab(QWidget):
 
     def storage_moved(self, ok, result):
         self.move_storage_button.setEnabled(True)
+        self.choose_storage_button.setEnabled(True)
         if ok:
             self.storage_status.setText(f"✅ {result} fichier(s) copiés. Relancez IA Manager et Ollama "
                                         "pour utiliser les nouveaux dossiers. Les fichiers sur C: sont conservés.")
