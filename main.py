@@ -18,6 +18,7 @@ from src.ui.branding import asset
 from src.ui.main_window import MainWindow
 from src.ui.v100_extension import install_v100
 from src.ui.v120_extension import install_v120
+from src.ui.v121_extension import install_v121
 
 LOG_FILE = Path.home() / ".ia_manager" / "erreurs.log"
 
@@ -60,6 +61,7 @@ def main():
     window = MainWindow()
     install_v100(window)
     install_v120(window)
+    install_v121(window)
     window.show()
 
     sys.exit(app.exec())
