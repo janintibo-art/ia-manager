@@ -24,6 +24,7 @@ from src.ui.v127_extension import install_v127
 from src.ui.v128_extension import install_v128
 from src.ui.v129_extension import install_v129
 from src.ui.v130_extension import install_v130
+from src.ui.v131_extension import install_v131
 
 LOG_FILE = Path.home() / ".ia_manager" / "erreurs.log"
 
@@ -72,6 +73,7 @@ def main():
     install_v128(window)
     install_v129(window)
     install_v130(window)
+    install_v131(window)
     window.show()
 
     sys.exit(app.exec())
