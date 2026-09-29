@@ -1,4 +1,5 @@
 import base64
+import os
 import tempfile
 from pathlib import Path
 
@@ -70,11 +71,14 @@ def test_blender_scripts_fail_on_python_error_and_do_not_collide():
     with tempfile.TemporaryDirectory() as root:
         source = Path(root) / "hero.blend"
         source.write_bytes(b"blend")
+        executable = Path(root) / ("blender.exe" if os.name == "nt" else "blender")
+        executable.write_bytes(b"fake executable")
         glb = blender_animation.export_animated_script(str(source), str(Path(root) / "hero"), "glb")
         fbx = blender_animation.export_animated_script(str(source), str(Path(root) / "hero"), "fbx")
         assert glb != fbx
         assert "export_animations=True" in glb.read_text(encoding="utf-8")
-        command = blender_tools.headless_script_command(str(source), glb, str(source))
+        command = blender_tools.headless_script_command(str(executable), glb, str(source))
+        assert command["program"] == str(executable.resolve())
         assert command["args"][:2] == ["--background", str(source.resolve())]
         assert "--python-exit-code" in command["args"]
 
