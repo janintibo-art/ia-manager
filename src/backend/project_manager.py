@@ -14,6 +14,8 @@ import re
 import shutil
 import unicodedata
 import uuid
+import os
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -60,6 +62,21 @@ TRASH_DIR = ".corbeille"
 
 def now_iso() -> str:
     return datetime.now().isoformat(timespec="seconds")
+
+
+def _write_text_atomic(path: Path, text: str) -> None:
+    """Écrit un texte sans exposer un JSON tronqué après une interruption."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            stream.write(text)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
 
 
 def slugify(text: str) -> str:
@@ -122,7 +139,7 @@ class ProjectManager:
         meta = {"name": name, "category": category, "tags": [], "favorite": False,
                 "default_model": "", "github_repo": "", "local_name": "", "pc_folder": "",
                 "created": now_iso(), "updated": now_iso()}
-        (d / META_FILE).write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+        _write_text_atomic(d / META_FILE, json.dumps(meta, ensure_ascii=False, indent=2))
         return pid
 
     def save_meta(self, pid: str, changes: Dict) -> None:
@@ -136,8 +153,7 @@ class ProjectManager:
             if key in changes:
                 meta[key] = changes[key]
         meta["updated"] = now_iso()
-        (self._dir(pid) / META_FILE).write_text(
-            json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+        _write_text_atomic(self._dir(pid) / META_FILE, json.dumps(meta, ensure_ascii=False, indent=2))
 
     def delete_project(self, pid: str) -> Path:
         """Déplace le projet dans la corbeille (récupérable à la main)"""
@@ -217,8 +233,7 @@ class ProjectManager:
             "updated": now_iso(),
             "messages": conv.get("messages", []),
         }
-        (self._saves(pid) / f"{cid}.json").write_text(
-            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        _write_text_atomic(self._saves(pid) / f"{cid}.json", json.dumps(data, ensure_ascii=False, indent=2))
         self.save_meta(pid, {})
         return cid
 

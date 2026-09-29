@@ -261,6 +261,10 @@ def mark_success(plan: Dict[str, Any], step_info: Dict[str, Any]) -> Dict[str, A
             raise ValueError("Blender a terminé mais le fichier attendu est absent : " + produced)
         plan["current_file"] = str(p.resolve())
     artifact = str(step_info.get("artifact") or "")
+    if artifact:
+        item = Path(artifact)
+        if not item.exists() or (item.is_file() and item.stat().st_size == 0) or (item.is_dir() and not any(item.iterdir())):
+            raise ValueError("Blender a terminé mais la sortie attendue est absente : " + artifact)
     hist = list(plan.get("history") or [])
     hist.append({
         "step": step_info["step"],

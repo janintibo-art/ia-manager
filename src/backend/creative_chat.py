@@ -6,6 +6,7 @@ import os
 import re
 import subprocess
 import time
+import uuid
 from pathlib import Path
 from typing import Dict, List
 
@@ -107,7 +108,7 @@ def tool_state(key: str) -> Dict:
     return {"installed": state.startswith("installé"), "state": state, "root": root}
 
 def _timestamp() -> str:
-    return time.strftime("%Y%m%d_%H%M%S")
+    return time.strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:8]
 
 def _comfy_url() -> str:
     url = str(settings.get("image_comfy_url") or "").strip()
@@ -193,7 +194,7 @@ def generate_audio(model: Dict, prompt: str) -> Dict:
         f"print({(str(base)+'.wav')!r})",
     ])
     env = os.environ.copy()
-    env.update(creative_tools.environment(root, "audiocraft", offline=False))
+    env.update(creative_tools.environment(root, "audiocraft", offline=bool(settings.get("offline_mode"))))
     flags = 0x08000000 if os.name == "nt" else 0
     proc = subprocess.run(
         [str(python), "-c", code],

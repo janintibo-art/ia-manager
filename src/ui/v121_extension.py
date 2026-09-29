@@ -74,10 +74,12 @@ def install_v121(window):
                     self.status.setText("Un aperçu 3D est déjà en cours.")
                     return
                 self.status.setText("⏳ Blender prépare l'aperçu 3D…")
+                target_message = self.messages[index]
+                generation = getattr(self, "creative_generation", 0)
                 worker = FunctionWorker(chat_3d_preview.render_preview, str(path))
                 self.preview3d_worker = worker
                 worker.done.connect(
-                    lambda ok, value, w=worker, i=index: self.preview3d_done(w, i, ok, value)
+                    lambda ok, value, w=worker, m=target_message, g=generation: self.preview3d_done(w, m, g, ok, value)
                 )
                 worker.start()
                 return
@@ -147,15 +149,18 @@ def install_v121(window):
 
         return old_link(url)
 
-    def preview3d_done(self, worker, index, ok, value):
+    def preview3d_done(self, worker, target_message, generation, ok, value):
         if self.preview3d_worker is not worker:
             return
         self.preview3d_worker = None
+        if generation != getattr(self, "creative_generation", 0) or not any(m is target_message for m in self.messages):
+            self.status.setText("Aperçu terminé pour une ancienne conversation ; résultat ignoré ici.")
+            return
         if not ok:
             self.status.setText("❌ Aperçu 3D : " + str(value))
             return
         try:
-            result = self.messages[index].setdefault("creative_result", {})
+            result = target_message.setdefault("creative_result", {})
             result["preview_path"] = str(value["preview_path"])
             ref = self.current_ref()
             try:

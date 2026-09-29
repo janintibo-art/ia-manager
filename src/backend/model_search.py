@@ -364,8 +364,13 @@ def download_github_gguf(repo: str, asset: Dict, timeout: int = 60, on_progress=
                 raise RuntimeError(f"Téléchargement incomplet : {part.stat().st_size} / {expected} octets.")
             digest = str(asset.get("digest") or "")
             if digest.startswith("sha256:"):
-                checksum = hashlib.sha256(part.read_bytes()).hexdigest()
+                hasher = hashlib.sha256()
+                with part.open("rb") as stream:
+                    for block in iter(lambda: stream.read(1024 * 1024), b""):
+                        hasher.update(block)
+                checksum = hasher.hexdigest()
                 if checksum.lower() != digest.split(":", 1)[1].lower():
+                    part.unlink(missing_ok=True)
                     raise RuntimeError("Vérification SHA-256 échouée : fichier supprimé.")
             part.replace(target)
     return str(target)

@@ -77,7 +77,7 @@ class BlenderStudioPage(QWidget):
         p=QProcess(self); self.install_proc=p; p.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
         p.readyReadStandardOutput.connect(self.read_install_output)
         p.finished.connect(lambda code,status:self.install_finished(p,code,label))
-        p.errorOccurred.connect(lambda _e:self.status.setText('❌ '+label+' : '+p.errorString()))
+        p.errorOccurred.connect(lambda _e:self.install_process_error(p,label))
         self.status.setText('⏳ '+label+'…'); self.log.appendPlainText('\n> '+label)
         self.install_btn.setEnabled(False); self.upgrade_btn.setEnabled(False)
         p.start(command['program'],command['args'])
@@ -110,6 +110,13 @@ class BlenderStudioPage(QWidget):
         elif code==0: self.status.setText('✅ WinGet a terminé. Utilisez Détecter si nécessaire.')
         else: self.status.setText(f'❌ {label} a échoué (code {code}).')
         self.refresh_install_state()
+    def install_process_error(self,p,label):
+        if self.install_proc is not p:return
+        self.status.setText('❌ '+label+' : '+p.errorString())
+        if p.state()==QProcess.ProcessState.NotRunning:
+            self.install_proc=None
+            p.deleteLater()
+            self.refresh_install_state()
 
     def detect(self):
         path=blender_tools.detect_blender()
@@ -143,7 +150,7 @@ class BlenderStudioPage(QWidget):
         if command.get('cwd'):p.setWorkingDirectory(command['cwd'])
         p.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
         p.readyReadStandardOutput.connect(self.read_output); p.finished.connect(lambda code,status:self.finished(p,code,label))
-        p.errorOccurred.connect(lambda _e:self.status.setText('❌ '+p.errorString()))
+        p.errorOccurred.connect(lambda _e:self.process_error(p,label))
         self.status.setText('⏳ '+label+'…'); self.log.appendPlainText('\n> '+label); p.start(command['program'],command['args'])
     def read_output(self):
         if self.proc:self.log.insertPlainText(bytes(self.proc.readAllStandardOutput()).decode('utf-8',errors='replace'))
@@ -153,6 +160,12 @@ class BlenderStudioPage(QWidget):
         if label=='Diagnostic Blender' and code==0:
             for line in reversed(self.log.toPlainText().splitlines()):
                 if line.lower().startswith('blender '): self.version.setText(line); break
+    def process_error(self,p,label):
+        if self.proc is not p:return
+        self.status.setText('❌ '+label+' : '+p.errorString())
+        if p.state()==QProcess.ProcessState.NotRunning:
+            self.proc=None
+            p.deleteLater()
     def test_blender(self):
         try:self.run(blender_tools.version_command(self.current_executable()),'Diagnostic Blender')
         except Exception as exc:QMessageBox.warning(self,'Blender',str(exc))

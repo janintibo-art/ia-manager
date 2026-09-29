@@ -101,7 +101,7 @@ def headless_script_command(executable: str, script: Path, blend_file: str = '')
     args = ['--background']
     if blend_file:
         args.append(str(Path(blend_file).resolve()))
-    args += ['--python', str(Path(script).resolve())]
+    args += ['--python-exit-code', '1', '--python', str(Path(script).resolve())]
     return {'program': exe, 'args': args, 'cwd': str(script.parent)}
 
 def template_script(project: Path, template: str) -> Path:

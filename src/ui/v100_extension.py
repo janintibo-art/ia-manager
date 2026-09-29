@@ -122,7 +122,13 @@ def _attach_creative_chat(window):
     old_render=tab.render_message
     old_link=tab.on_link
     old_settings=tab.open_model_settings
+    old_reset=tab.reset_conversation
     tab.creative_worker=None
+    tab.creative_generation=0
+
+    def reset_conversation(self):
+        self.creative_generation += 1
+        return old_reset()
 
     def refresh_models(self):
         keep=self.current_ref()
@@ -186,12 +192,17 @@ def _attach_creative_chat(window):
 
         worker=FunctionWorker(creative_chat.generate,ref,text,attachments)
         self.creative_worker=worker
-        worker.done.connect(lambda ok,res,w=worker,r=ref:self.creative_done(w,r,ok,res))
+        generation=self.creative_generation
+        worker.done.connect(lambda ok,res,w=worker,r=ref,g=generation:self.creative_done(w,r,g,ok,res))
         worker.start()
 
-    def creative_done(self,worker,ref,ok,result):
+    def creative_done(self,worker,ref,generation,ok,result):
         if self.creative_worker is not worker:return
         self.creative_worker=None
+        if generation != self.creative_generation:
+            self.send_btn.setEnabled(True)
+            self.status.setText("Création terminée dans l’ancienne conversation ; résultat ignoré ici.")
+            return
         self.send_btn.setEnabled(True)
         if not ok:
             self.system_message("❌ Création impossible : "+html.escape(str(result)))
@@ -269,6 +280,7 @@ def _attach_creative_chat(window):
         return old_settings()
 
     tab.refresh_models=MethodType(refresh_models,tab)
+    tab.reset_conversation=MethodType(reset_conversation,tab)
     tab.show_hint=MethodType(show_hint,tab)
     tab.send_message=MethodType(send_message,tab)
     tab.creative_done=MethodType(creative_done,tab)

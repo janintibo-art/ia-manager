@@ -22,11 +22,17 @@ from src.backend import settings  # noqa: E402
 settings.set("projects_dir", str(Path(profile.name) / "Projets"))
 
 from src.ui.main_window import MainWindow  # noqa: E402
+from src.ui.v100_extension import install_v100  # noqa: E402
+from src.ui.v120_extension import install_v120  # noqa: E402
+from src.ui.v121_extension import install_v121  # noqa: E402
 
 
 def main():
     app = QApplication(sys.argv)
     window = MainWindow()
+    install_v100(window)
+    install_v120(window)
+    install_v121(window)
     window.show()
     app.processEvents()
     assert window.tabs.count() >= 15, f"Onglets manquants : {window.tabs.count()}"

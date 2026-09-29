@@ -19,7 +19,11 @@ MAX_REPLY = 512 * 1024
 
 def lan_addresses():
     addresses = []
-    for entries in psutil.net_if_addrs().values():
+    try:
+        interfaces = psutil.net_if_addrs()
+    except (OSError, PermissionError):
+        return []
+    for entries in interfaces.values():
         for entry in entries:
             if entry.family == socket.AF_INET:
                 ip = ipaddress.ip_address(entry.address)

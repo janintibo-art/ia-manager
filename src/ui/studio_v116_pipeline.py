@@ -202,7 +202,13 @@ class CharacterPipelinePage(QWidget):
             self.auto_mode=False; QMessageBox.information(self,"Pipeline personnage","Pipeline terminé.\n\nSortie : "+self.plan["output_dir"])
 
     def process_error(self,p,info):
-        if self.proc is p:self.status.setText("❌ "+p.errorString())
+        if self.proc is not p:return
+        message=p.errorString()
+        self.status.setText("❌ "+message)
+        if p.state()==QProcess.ProcessState.NotRunning:
+            self.proc=None; p.deleteLater(); self.auto_mode=False
+            self.plan=character_pipeline.mark_error(self.plan,info["label"]+" : "+message)
+            self.refresh()
 
     def skip(self):
         if self.proc or not self.plan:return

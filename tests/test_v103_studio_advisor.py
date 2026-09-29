@@ -43,6 +43,6 @@ def test_extension_keeps_v102_fix_and_attaches_v103():
     root = Path(__file__).resolve().parents[1]
     source = (root / "src" / "ui" / "v100_extension.py").read_text(encoding="utf-8")
     ast.parse(source)
-    assert '("huggingface", "github", "modelscope", "civitai")' in source
+    assert "('huggingface','github','modelscope','civitai')" in source.replace(" ", "")
     assert "studio_advisor.extend_catalog()" in source
     assert "_attach_v103(tab)" in source

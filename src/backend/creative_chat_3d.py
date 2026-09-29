@@ -26,7 +26,8 @@ def _reference(attachments: List[Dict]) -> str:
 
 def _env(root: str, engine: str) -> Dict[str, str]:
     env = os.environ.copy()
-    env.update(creative_tools.environment(root, engine, offline=False))
+    from src.backend import settings
+    env.update(creative_tools.environment(root, engine, offline=bool(settings.get("offline_mode"))))
     return env
 
 def _run(command, cwd: Path, env: Dict[str, str]) -> str:

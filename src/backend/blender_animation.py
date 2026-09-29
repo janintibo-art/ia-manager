@@ -168,7 +168,7 @@ def export_animated_script(source: str, output: str, fmt: str = "glb") -> Path:
             "bpy.ops.export_scene.fbx(filepath=DST,bake_anim=True,add_leaf_bones=False,use_armature_deform_only=True)",
             "print('IA_MANAGER_ANIM_EXPORT::'+DST)",
         ]
-    return _write(dst.parent / ".ia_manager_anim_export.py", lines)
+    return _write(dst.parent / f".ia_manager_anim_export_{fmt}.py", lines)
 
 def animation_info_script(source: str) -> Path:
     src = _source(source)

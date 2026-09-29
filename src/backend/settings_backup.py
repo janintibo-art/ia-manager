@@ -11,6 +11,9 @@ _SAFE_KEYS = {
     "web_search", "searxng_url", "offline_mode", "providers", "project_memory_enabled",
     "serialize_local_jobs",
     "model_favorites",
+    "creative_tools_root", "creative_tools_profiles", "creative_tools_requested",
+    "blender_executable", "blender_projects_root",
+    "image_comfy_url", "image_local_only", "media_studio_profiles",
 }
 
 

@@ -2,6 +2,7 @@
 import os
 import shutil
 import hashlib
+import uuid
 from pathlib import Path
 
 from src.backend import settings
@@ -37,12 +38,15 @@ def validate_root(directory):
     if not path.is_absolute() or str(path) == path.anchor or (os.name == "nt" and not path.drive):
         raise ValueError("Choisissez un dossier complet sur un disque, par exemple D:\\IA Manager.")
     path.mkdir(parents=True, exist_ok=True)
-    probe = path / ".ia_manager_write_test"
+    probe = path / (".ia_manager_write_test_" + uuid.uuid4().hex)
+    created = False
     try:
         with probe.open("xb") as stream:
+            created = True
             stream.write(b"ok")
     finally:
-        probe.unlink(missing_ok=True)
+        if created:
+            probe.unlink(missing_ok=True)
     return path.resolve()
 
 
