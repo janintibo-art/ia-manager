@@ -1,0 +1,21 @@
+# IA Manager v129 — gestionnaire de versions Obliteratus
+
+- Nouveau panneau « Versions Obliteratus ».
+- Enregistrement automatique d’une version après un export Ollama réussi.
+- Enregistrement manuel possible à tout moment.
+- Métadonnées conservées :
+  - date ;
+  - modèle source ;
+  - checkpoint source ;
+  - méthode Obliteratus ;
+  - nom Ollama ;
+  - chemin GGUF ;
+  - note personnelle ;
+  - favori.
+- Tableau de versions avec tri visuel des favoris.
+- Modification du nom et des notes.
+- Envoi direct d’une version vers le comparatif Avant / Après.
+- Ouverture directe de la version dans le Chat.
+- Ouverture du dossier du checkpoint ou du GGUF.
+- Suppression uniquement du registre, sans effacer les fichiers ni le modèle Ollama.
+- Registre sauvegardé localement dans `~/.ia_manager/obliteratus_versions.json`.
