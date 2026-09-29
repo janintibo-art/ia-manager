@@ -40,6 +40,7 @@ from src.ui.v150_extension import install_v150
 from src.ui.v151_extension import install_v151
 from src.ui.v152_extension import install_v152
 from src.ui.v153_extension import install_v153
+from src.ui.v154_extension import install_v154
 
 LOG_FILE = Path.home() / ".ia_manager" / "erreurs.log"
 
@@ -81,7 +82,8 @@ def main():
     install_v141(window); install_v142(window); install_v143(window)
     install_v144(window); install_v145(window); install_v146(window)
     install_v147(window); install_v148(window); install_v149(window)
-    install_v150(window); install_v151(window); install_v152(window); install_v153(window)
+    install_v150(window); install_v151(window); install_v152(window)
+    install_v153(window); install_v154(window)
     window.show()
     sys.exit(app.exec())
 
