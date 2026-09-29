@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import os
-import subprocess
 import time
 from pathlib import Path
 from typing import Dict
@@ -75,7 +74,7 @@ def build_preview_script(glb_path: str, output_path: str) -> Path:
     script.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return script
 
-def render_preview(glb_path: str) -> Dict:
+def render_preview(glb_path: str, should_stop=lambda: False) -> Dict:
     src = Path(glb_path).expanduser().resolve()
     out = preview_path(str(src))
     blender = blender_tools.detect_blender()
@@ -85,16 +84,10 @@ def render_preview(glb_path: str) -> Dict:
         )
     script = build_preview_script(str(src), str(out))
     cmd = blender_tools.headless_script_command(blender, script)
-    flags = 0x08000000 if os.name == "nt" else 0
-    proc = subprocess.run(
-        [cmd["program"], *cmd["args"]],
-        cwd=cmd["cwd"],
-        capture_output=True,
-        text=True,
-        timeout=MAX_SECONDS,
-        creationflags=flags,
-        encoding="utf-8",
-        errors="replace",
+    from src.backend import process_control
+    proc = process_control.run(
+        [cmd["program"], *cmd["args"]], cwd=cmd["cwd"], timeout=MAX_SECONDS,
+        should_stop=should_stop,
     )
     if proc.returncode != 0:
         raise RuntimeError((proc.stderr or proc.stdout or "Blender n'a pas pu créer l'aperçu.")[-1800:])

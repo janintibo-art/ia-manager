@@ -57,7 +57,7 @@ def workflow(checkpoint, prompt, negative, size, steps, cfg, seed):
     }
 
 
-def generate(url, graph, progress=lambda _: None, local_only=True):
+def generate(url, graph, progress=lambda _: None, local_only=True, should_stop=lambda: False):
     url = base_url(url, local_only)
     response = _request('POST', url + '/prompt', json={'prompt': graph, 'client_id': str(uuid.uuid4())}, timeout=30)
     response.raise_for_status()
@@ -68,6 +68,12 @@ def generate(url, graph, progress=lambda _: None, local_only=True):
     progress("Génération en cours dans ComfyUI…")
     deadline = time.monotonic() + 1800
     while time.monotonic() < deadline:
+        if should_stop():
+            try:
+                _request('POST', url + '/interrupt', timeout=5)
+            except Exception:
+                pass
+            raise InterruptedError("Création d’image arrêtée.")
         response = _request('GET', url + '/history/' + prompt_id, timeout=15)
         response.raise_for_status()
         history = response.json().get(prompt_id)

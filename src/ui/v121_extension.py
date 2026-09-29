@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import QMessageBox
 
 from src.backend import chat_3d_preview
 from src.ui import style
-from src.ui.workers import FunctionWorker
+from src.ui.workers import CancellableFunctionWorker
 
 
 def install_v121(window):
@@ -76,12 +76,17 @@ def install_v121(window):
                 self.status.setText("⏳ Blender prépare l'aperçu 3D…")
                 target_message = self.messages[index]
                 generation = getattr(self, "creative_generation", 0)
-                worker = FunctionWorker(chat_3d_preview.render_preview, str(path))
+                worker = CancellableFunctionWorker(
+                    chat_3d_preview.render_preview, str(path),
+                    queue_label="Aperçu 3D Blender",
+                )
                 self.preview3d_worker = worker
                 worker.done.connect(
                     lambda ok, value, w=worker, m=target_message, g=generation: self.preview3d_done(w, m, g, ok, value)
                 )
                 worker.start()
+                self.send_btn.setVisible(False)
+                self.stop_btn.setVisible(True)
                 return
             except (IndexError, ValueError, OSError) as exc:
                 self.status.setText("Aperçu 3D impossible : " + str(exc))
@@ -153,6 +158,8 @@ def install_v121(window):
         if self.preview3d_worker is not worker:
             return
         self.preview3d_worker = None
+        self.send_btn.setVisible(True)
+        self.stop_btn.setVisible(False)
         if generation != getattr(self, "creative_generation", 0) or not any(m is target_message for m in self.messages):
             self.status.setText("Aperçu terminé pour une ancienne conversation ; résultat ignoré ici.")
             return

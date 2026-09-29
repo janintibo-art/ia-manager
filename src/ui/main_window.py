@@ -328,13 +328,13 @@ class MainWindow(QMainWindow):
         self.workspace_tab.cancel_import()
         if self.task_worker is not None:
             self.task_worker.stop()
-        from src.ui.workers import SafeThread, StreamWorker, ChatWorker
+        from src.ui.workers import SafeThread, StreamWorker, ChatWorker, CancellableFunctionWorker
         for worker in list(SafeThread._alive):
-            if isinstance(worker, (StreamWorker, ChatWorker)):
+            if isinstance(worker, (StreamWorker, ChatWorker, CancellableFunctionWorker)):
                 worker.stop()
         for worker in list(SafeThread._alive):
-            if isinstance(worker, (StreamWorker, ChatWorker)):
-                worker.wait(1000)
+            if isinstance(worker, (StreamWorker, ChatWorker, CancellableFunctionWorker)):
+                worker.wait(3000)
         if self.tray:
             self.tray.hide()
         event.accept()

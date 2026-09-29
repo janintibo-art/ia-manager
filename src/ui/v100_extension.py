@@ -27,7 +27,7 @@ from src.ui.studio_v114_mapping import RigMappingClipsPage
 from src.ui.studio_v115_library import AnimationLibraryPage
 from src.ui.studio_v116_pipeline import CharacterPipelinePage
 from src.ui.termux_tab import TermuxTab
-from src.ui.workers import FunctionWorker, DownloadWorker
+from src.ui.workers import FunctionWorker, DownloadWorker, CancellableFunctionWorker
 from src.ui import style
 
 
@@ -123,6 +123,7 @@ def _attach_creative_chat(window):
     old_link=tab.on_link
     old_settings=tab.open_model_settings
     old_reset=tab.reset_conversation
+    old_stop=tab.stop_generation
     tab.creative_worker=None
     tab.creative_generation=0
 
@@ -190,15 +191,22 @@ def _attach_creative_chat(window):
         self.send_btn.setEnabled(False)
         self.status.setText(f"⏳ {model['label']} prépare la création locale…")
 
-        worker=FunctionWorker(creative_chat.generate,ref,text,attachments)
+        worker=CancellableFunctionWorker(
+            creative_chat.generate,ref,text,attachments,
+            queue_label="Création locale · "+model["label"],
+        )
         self.creative_worker=worker
         generation=self.creative_generation
         worker.done.connect(lambda ok,res,w=worker,r=ref,g=generation:self.creative_done(w,r,g,ok,res))
+        self.send_btn.setVisible(False)
+        self.stop_btn.setVisible(True)
         worker.start()
 
     def creative_done(self,worker,ref,generation,ok,result):
         if self.creative_worker is not worker:return
         self.creative_worker=None
+        self.send_btn.setVisible(True)
+        self.stop_btn.setVisible(False)
         if generation != self.creative_generation:
             self.send_btn.setEnabled(True)
             self.status.setText("Création terminée dans l’ancienne conversation ; résultat ignoré ici.")
@@ -218,6 +226,18 @@ def _attach_creative_chat(window):
         self.status.setText("✅ Création terminée.")
         try:self.save_current(ref)
         except Exception as exc:self.system_message("⚠️ Sauvegarde impossible : "+html.escape(str(exc)))
+
+    def stop_generation(self):
+        if self.creative_worker is not None and self.creative_worker.isRunning():
+            self.creative_worker.stop()
+            self.status.setText("⏹ Arrêt de la création demandé…")
+            return
+        preview=getattr(self,"preview3d_worker",None)
+        if preview is not None and preview.isRunning():
+            preview.stop()
+            self.status.setText("⏹ Arrêt de l’aperçu demandé…")
+            return
+        return old_stop()
 
     def render_message(self,index,model_ref):
         m=self.messages[index]
@@ -284,6 +304,7 @@ def _attach_creative_chat(window):
     tab.show_hint=MethodType(show_hint,tab)
     tab.send_message=MethodType(send_message,tab)
     tab.creative_done=MethodType(creative_done,tab)
+    tab.stop_generation=MethodType(stop_generation,tab)
     tab.render_message=MethodType(render_message,tab)
     tab.on_link=MethodType(on_link,tab)
     tab.open_model_settings=MethodType(open_model_settings,tab)
@@ -295,6 +316,9 @@ def _attach_creative_chat(window):
     try:tab.send_btn.clicked.disconnect()
     except (TypeError,RuntimeError):pass
     tab.send_btn.clicked.connect(tab.send_message)
+    try:tab.stop_btn.clicked.disconnect()
+    except (TypeError,RuntimeError):pass
+    tab.stop_btn.clicked.connect(tab.stop_generation)
     try:tab.chat_display.anchorClicked.disconnect()
     except (TypeError,RuntimeError):pass
     tab.chat_display.anchorClicked.connect(tab.on_link)

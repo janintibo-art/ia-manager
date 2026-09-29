@@ -4,7 +4,6 @@ from __future__ import annotations
 import base64
 import os
 import re
-import subprocess
 import time
 import uuid
 from pathlib import Path
@@ -138,7 +137,7 @@ def _select_checkpoint(url: str, hints) -> str:
         "Installez-le d'abord dans ComfyUI. Checkpoints détectés : " + preview
     )
 
-def generate_image(model: Dict, prompt: str) -> Dict:
+def generate_image(model: Dict, prompt: str, should_stop=lambda: False) -> Dict:
     prompt = str(prompt or "").strip()
     if not prompt:
         raise ValueError("Décrivez l'image à créer.")
@@ -152,7 +151,7 @@ def generate_image(model: Dict, prompt: str) -> Dict:
         int(model["size"]), int(model["steps"]), float(model["cfg"]),
         int(time.time() * 1000) % 2147483647,
     )
-    data = image_studio.generate(url, graph, local_only=True)
+    data = image_studio.generate(url, graph, local_only=True, should_stop=should_stop)
     out = creations_dir() / f"{model['id']}_{_timestamp()}.png"
     out.write_bytes(data)
     return {
@@ -167,7 +166,7 @@ def _duration(prompt: str) -> int:
     match = re.search(r"(?:dur[ée]e?\s*[:=]?\s*)?(\d{1,2})\s*(?:s|sec|secondes?)\b", prompt.lower())
     return max(1, min(int(match.group(1)), 20)) if match else 8
 
-def generate_audio(model: Dict, prompt: str) -> Dict:
+def generate_audio(model: Dict, prompt: str, should_stop=lambda: False) -> Dict:
     prompt = str(prompt or "").strip()
     if not prompt:
         raise ValueError("Décrivez la musique ou le son à créer.")
@@ -195,17 +194,10 @@ def generate_audio(model: Dict, prompt: str) -> Dict:
     ])
     env = os.environ.copy()
     env.update(creative_tools.environment(root, "audiocraft", offline=bool(settings.get("offline_mode"))))
-    flags = 0x08000000 if os.name == "nt" else 0
-    proc = subprocess.run(
-        [str(python), "-c", code],
-        cwd=str(paths["source"]),
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=1800,
-        creationflags=flags,
-        encoding="utf-8",
-        errors="replace",
+    from src.backend import process_control
+    proc = process_control.run(
+        [str(python), "-c", code], cwd=str(paths["source"]), env=env,
+        timeout=1800, should_stop=should_stop,
     )
     if proc.returncode != 0:
         raise RuntimeError((proc.stderr or proc.stdout or "Échec AudioCraft")[-1600:])
@@ -256,12 +248,12 @@ def prepare_3d(model: Dict, prompt: str, attachments: List[Dict]) -> Dict:
         "path": reference,
     }
 
-def generate(ref: str, prompt: str, attachments=None) -> Dict:
+def generate(ref: str, prompt: str, attachments=None, should_stop=lambda: False) -> Dict:
     model = model_for_ref(ref)
     if model["kind"] == "image":
-        return generate_image(model, prompt)
+        return generate_image(model, prompt, should_stop)
     if model["kind"] == "audio":
-        return generate_audio(model, prompt)
+        return generate_audio(model, prompt, should_stop)
     if model["kind"] == "3d":
         return prepare_3d(model, prompt, list(attachments or []))
     raise ValueError("Type créatif inconnu.")

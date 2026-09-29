@@ -120,6 +120,39 @@ class FunctionWorker(SafeThread):
             self.done.emit(False, str(e))
 
 
+class CancellableFunctionWorker(SafeThread):
+    done = pyqtSignal(bool, object)
+
+    def __init__(self, func, *args, queue_label=""):
+        super().__init__()
+        self.func = func
+        self.args = args
+        self.queue_label = queue_label
+
+    def stop(self):
+        self.requestInterruption()
+
+    def run(self):
+        from src.backend import local_jobs
+        token = None
+        try:
+            if self.queue_label and local_jobs.enabled():
+                token = local_jobs.acquire(self.queue_label, self.isInterruptionRequested)
+                if token is None:
+                    raise InterruptedError("Création arrêtée avant son démarrage.")
+            if self.isInterruptionRequested():
+                raise InterruptedError("Création arrêtée avant son démarrage.")
+            value = self.func(*self.args, should_stop=self.isInterruptionRequested)
+            self.done.emit(True, value)
+        except InterruptedError as error:
+            self.done.emit(False, str(error) or "Création arrêtée.")
+        except Exception as error:
+            self.done.emit(False, str(error))
+        finally:
+            if token:
+                local_jobs.release(token)
+
+
 class StreamWorker(SafeThread):
     token = pyqtSignal(str)
     phase = pyqtSignal(str)

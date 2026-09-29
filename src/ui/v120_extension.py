@@ -19,14 +19,14 @@ def install_v120(window):
     # Étendre le routeur créatif v119 sans toucher aux générateurs image/audio.
     old_generate = creative_chat.generate
 
-    def generate(ref, prompt, attachments=None):
+    def generate(ref, prompt, attachments=None, should_stop=lambda: False):
         try:
             model = creative_chat.model_for_ref(ref)
         except Exception:
-            return old_generate(ref, prompt, attachments)
+            return old_generate(ref, prompt, attachments, should_stop)
         if model.get("kind") == "3d":
-            return creative_chat_3d.generate_3d(ref, prompt, attachments)
-        return old_generate(ref, prompt, attachments)
+            return creative_chat_3d.generate_3d(ref, prompt, attachments, should_stop)
+        return old_generate(ref, prompt, attachments, should_stop)
 
     creative_chat.generate = generate
 

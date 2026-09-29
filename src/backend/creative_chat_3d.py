@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import os
 import shutil
-import subprocess
 import time
 from pathlib import Path
 from typing import Dict, List
@@ -30,19 +29,9 @@ def _env(root: str, engine: str) -> Dict[str, str]:
     env.update(creative_tools.environment(root, engine, offline=bool(settings.get("offline_mode"))))
     return env
 
-def _run(command, cwd: Path, env: Dict[str, str]) -> str:
-    flags = 0x08000000 if os.name == "nt" else 0
-    proc = subprocess.run(
-        [str(x) for x in command],
-        cwd=str(cwd),
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=MAX_SECONDS,
-        creationflags=flags,
-        encoding="utf-8",
-        errors="replace",
-    )
+def _run(command, cwd: Path, env: Dict[str, str], should_stop=lambda: False) -> str:
+    from src.backend import process_control
+    proc = process_control.run(command, cwd=str(cwd), env=env, timeout=MAX_SECONDS, should_stop=should_stop)
     if proc.returncode != 0:
         tail = (proc.stderr or proc.stdout or "Le moteur 3D a échoué.")[-2200:]
         raise RuntimeError(tail)
@@ -87,7 +76,7 @@ def _copy_result(source: Path, model_id: str) -> Path:
         shutil.copy2(source, out)
     return out
 
-def generate_triposr(model: Dict, reference: str) -> Dict:
+def generate_triposr(model: Dict, reference: str, should_stop=lambda: False) -> Dict:
     root = _root()
     state = creative_chat.tool_state("triposr")
     if not state["installed"]:
@@ -100,7 +89,7 @@ def generate_triposr(model: Dict, reference: str) -> Dict:
     work = creative_chat.creations_dir() / ("triposr_job_" + time.strftime("%Y%m%d_%H%M%S"))
     work.mkdir(parents=True, exist_ok=True)
     command = triposr_command(python, paths["source"], reference, work, hardware)
-    _run(command, paths["source"], _env(root, "triposr"))
+    _run(command, paths["source"], _env(root, "triposr"), should_stop)
     result = _copy_result(work / "0" / "mesh.glb", model["id"])
     return {
         "kind": "3d",
@@ -111,7 +100,7 @@ def generate_triposr(model: Dict, reference: str) -> Dict:
         "text": "Modèle 3D créé avec TripoSR. Le GLB est prêt pour Blender ou le Pipeline personnage.",
     }
 
-def generate_hunyuan(model: Dict, reference: str) -> Dict:
+def generate_hunyuan(model: Dict, reference: str, should_stop=lambda: False) -> Dict:
     root = _root()
     state = creative_chat.tool_state("hunyuan3d")
     if not state["installed"]:
@@ -125,7 +114,7 @@ def generate_hunyuan(model: Dict, reference: str) -> Dict:
     work.mkdir(parents=True, exist_ok=True)
     raw = work / "mesh.glb"
     command = hunyuan_command(python, reference, raw, hardware)
-    _run(command, paths["source"], _env(root, "hunyuan3d"))
+    _run(command, paths["source"], _env(root, "hunyuan3d"), should_stop)
     result = _copy_result(raw, model["id"])
     return {
         "kind": "3d",
@@ -136,13 +125,13 @@ def generate_hunyuan(model: Dict, reference: str) -> Dict:
         "text": "Modèle 3D créé avec Hunyuan3D 2. Le GLB est prêt pour Blender ou le Pipeline personnage.",
     }
 
-def generate_3d(ref: str, prompt: str, attachments=None) -> Dict:
+def generate_3d(ref: str, prompt: str, attachments=None, should_stop=lambda: False) -> Dict:
     model = creative_chat.model_for_ref(ref)
     if model.get("kind") != "3d":
         raise ValueError("Ce modèle n'est pas un moteur 3D.")
     reference = _reference(list(attachments or []))
     if model["engine"] == "triposr":
-        return generate_triposr(model, reference)
+        return generate_triposr(model, reference, should_stop)
     if model["engine"] == "hunyuan3d":
-        return generate_hunyuan(model, reference)
+        return generate_hunyuan(model, reference, should_stop)
     raise ValueError("Moteur 3D non pris en charge.")
