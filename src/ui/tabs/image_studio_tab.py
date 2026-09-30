@@ -1,4 +1,4 @@
-"""Création d'images : catalogue et génération avec ComfyUI."""
+"""Création d'images : catalogue, installation de checkpoints et génération avec ComfyUI."""
 import html
 import secrets
 import threading
@@ -7,7 +7,7 @@ from PyQt6.QtCore import Qt, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices, QImage, QPixmap
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QPushButton, QCheckBox, QTextBrowser, QPlainTextEdit, QLineEdit, QFileDialog, QSpinBox,
-    QDoubleSpinBox, QMessageBox, QScrollArea)
+    QDoubleSpinBox, QMessageBox, QScrollArea, QProgressBar)
 from src.backend import image_studio as engine, settings
 from src.backend.local_creation import LOCAL_HELP
 
@@ -17,11 +17,13 @@ class ImageStudioTab(QWidget):
     result_ready = pyqtSignal(str, object)
     failed = pyqtSignal(str)
     progress = pyqtSignal(str)
+    download_progress = pyqtSignal(int)
 
     def __init__(self):
         super().__init__()
         self.busy = False
         self.image = QImage()
+        self.manual_checkpoints_dir = str(settings.get('image_checkpoints_dir') or '')
         outer = QVBoxLayout(self)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -30,7 +32,7 @@ class ImageStudioTab(QWidget):
         scroll.setWidget(body)
         root = QVBoxLayout(body)
         intro = QLabel("Des modèles pour créer des images à partir d'une description.\n"
-                       "ComfyUI doit être installé et lancé sur le PC. Les modèles de vision du chat servent à analyser les images.")
+                       "ComfyUI doit être installé et lancé sur le PC. IA Manager peut maintenant installer directement les checkpoints compatibles.")
         intro.setWordWrap(True)
         root.addWidget(intro)
         tools_button = QPushButton("Installer / démarrer les outils locaux")
@@ -46,14 +48,37 @@ class ImageStudioTab(QWidget):
             self.catalog.addItem(model['name'] + ' — ' + model['specialty'])
         root.addWidget(self.catalog)
         self.details = QTextBrowser()
-        self.details.setMaximumHeight(140)
+        self.details.setMaximumHeight(145)
         root.addWidget(self.details)
+
         links = QHBoxLayout()
-        for text, handler in (("Fiche et téléchargement", self.open_model), ("Installer ComfyUI", lambda: self.open_url('https://www.comfy.org/download'))):
-            button = QPushButton(text)
-            button.clicked.connect(handler)
-            links.addWidget(button)
+        self.install_model_btn = QPushButton("⬇ Télécharger et installer ce modèle")
+        self.install_model_btn.setObjectName('Primary')
+        self.install_model_btn.clicked.connect(self.install_model)
+        links.addWidget(self.install_model_btn)
+        fiche = QPushButton("Voir la fiche")
+        fiche.clicked.connect(self.open_model)
+        links.addWidget(fiche)
+        comfy = QPushButton("Installer ComfyUI")
+        comfy.clicked.connect(lambda: self.open_url('https://www.comfy.org/download'))
+        links.addWidget(comfy)
         root.addLayout(links)
+
+        self.download_bar = QProgressBar()
+        self.download_bar.setRange(0, 100)
+        self.download_bar.setValue(0)
+        self.download_bar.setVisible(False)
+        root.addWidget(self.download_bar)
+
+        folder_row = QHBoxLayout()
+        self.folder_label = QLabel()
+        self.folder_label.setWordWrap(True)
+        folder_row.addWidget(self.folder_label, 1)
+        choose_folder = QPushButton('Choisir le dossier checkpoints…')
+        choose_folder.clicked.connect(self.choose_checkpoints_dir)
+        folder_row.addWidget(choose_folder)
+        root.addLayout(folder_row)
+
         row = QHBoxLayout()
         self.url = QLineEdit(settings.get('image_comfy_url') or 'http://127.0.0.1:8188')
         self.url.setPlaceholderText('Adresse de ComfyUI')
@@ -86,7 +111,7 @@ class ImageStudioTab(QWidget):
         self.generate_btn = QPushButton('🎨 Générer une image')
         self.generate_btn.clicked.connect(self.generate)
         root.addWidget(self.generate_btn)
-        self.status = QLabel('Choisissez une fiche, installez son checkpoint dans ComfyUI, puis connectez-vous.')
+        self.status = QLabel('Choisissez un modèle puis cliquez sur « Télécharger et installer ce modèle ».')
         self.status.setWordWrap(True)
         root.addWidget(self.status)
         self.preview = QLabel('Votre image apparaîtra ici')
@@ -99,8 +124,10 @@ class ImageStudioTab(QWidget):
         root.addWidget(self.save_btn)
         self.result_ready.connect(self.on_result)
         self.failed.connect(self.on_error)
-        self.progress.connect(self.status.setText)
+        self.progress.connect(self.on_progress)
+        self.download_progress.connect(self.download_bar.setValue)
         self.catalog.currentIndexChanged.connect(self.show_model)
+        self.refresh_folder_label()
         self.show_model()
 
     def open_url(self, url):
@@ -114,6 +141,38 @@ class ImageStudioTab(QWidget):
         try: self.open_url(engine.base_url(self.url.text(), self.local_only.isChecked()))
         except ValueError as exc: self.on_error(str(exc))
 
+    def current_checkpoints_dir(self):
+        managed = engine.managed_checkpoints_dir()
+        if managed is not None:
+            return managed
+        if self.manual_checkpoints_dir:
+            return engine.validate_checkpoints_dir(self.manual_checkpoints_dir)
+        return None
+
+    def refresh_folder_label(self):
+        try:
+            folder = self.current_checkpoints_dir()
+        except Exception:
+            folder = None
+        if folder:
+            self.folder_label.setText('Installation automatique dans : ' + str(folder))
+        else:
+            self.folder_label.setText('Dossier ComfyUI non détecté automatiquement. Utilisez « Choisir le dossier checkpoints… » une seule fois.')
+
+    def choose_checkpoints_dir(self):
+        start = self.manual_checkpoints_dir or str(Path.home())
+        path = QFileDialog.getExistingDirectory(self, 'Choisir ComfyUI ou son dossier models/checkpoints', start)
+        if not path:
+            return
+        try:
+            folder = engine.validate_checkpoints_dir(path)
+        except Exception as exc:
+            self.on_error(str(exc)); return
+        self.manual_checkpoints_dir = str(folder)
+        settings.set('image_checkpoints_dir', self.manual_checkpoints_dir)
+        self.refresh_folder_label()
+        self.status.setText('Dossier checkpoints enregistré : ' + self.manual_checkpoints_dir)
+
     def show_model(self):
         model = engine.MODELS[self.catalog.currentIndex()]
         info = ('Génération depuis cet onglet avec le checkpoint installé.' if model['direct'] else 'Disponible dans le catalogue ; génération dans l’interface ComfyUI uniquement.')
@@ -121,13 +180,17 @@ class ImageStudioTab(QWidget):
         self.size.setCurrentIndex(self.size.findData(model['size']))
         self.steps.setValue(model['steps'])
         self.cfg.setValue(model['cfg'])
+        self.install_model_btn.setEnabled(not self.busy and bool(model.get('download_url')))
+        self.install_model_btn.setText('⬇ Télécharger et installer ce modèle' if model.get('download_url') else 'Téléchargement manuel via la fiche')
         self.generate_btn.setEnabled(not self.busy and model['direct'] and self.checkpoint.count() > 0)
 
     def set_busy(self, busy):
         self.busy = busy
         for widget in (self.catalog, self.url, self.connect_btn, self.checkpoint, self.prompt, self.negative, self.size, self.steps, self.cfg, self.local_only):
             widget.setEnabled(not busy)
-        self.generate_btn.setEnabled(not busy and engine.MODELS[self.catalog.currentIndex()]['direct'] and self.checkpoint.count() > 0)
+        model = engine.MODELS[self.catalog.currentIndex()]
+        self.install_model_btn.setEnabled(not busy and bool(model.get('download_url')))
+        self.generate_btn.setEnabled(not busy and model['direct'] and self.checkpoint.count() > 0)
 
     def run_job(self, kind, function):
         self.set_busy(True)
@@ -137,8 +200,29 @@ class ImageStudioTab(QWidget):
                 self.result_ready.emit(kind, result)
             except Exception as exc:
                 try: self.failed.emit(str(exc))
-                except RuntimeError: pass  # fenêtre déjà détruite
+                except RuntimeError: pass
         threading.Thread(target=run, daemon=True).start()
+
+    def install_model(self):
+        model = engine.MODELS[self.catalog.currentIndex()]
+        folder = self.current_checkpoints_dir()
+        if folder is None:
+            self.choose_checkpoints_dir()
+            folder = self.current_checkpoints_dir()
+        if folder is None:
+            return
+        self.download_bar.setVisible(True)
+        self.download_bar.setValue(0)
+        self.status.setText('Préparation du téléchargement de ' + model['name'] + '…')
+        def report(message):
+            self.progress.emit(message)
+            if '%' in message:
+                try:
+                    percent = int(message.split('%', 1)[0].rsplit(' ', 1)[-1])
+                    self.download_progress.emit(max(0, min(100, percent)))
+                except Exception:
+                    pass
+        self.run_job('install', lambda: engine.download_checkpoint(model, folder, report))
 
     def connect_engine(self):
         try:
@@ -161,12 +245,27 @@ class ImageStudioTab(QWidget):
         local_only = self.local_only.isChecked()
         self.run_job('image', lambda: engine.generate(url, graph, self.progress.emit, local_only))
 
+    def on_progress(self, message):
+        self.status.setText(message)
+
     def on_result(self, kind, result):
         self.set_busy(False)
+        if kind == 'install':
+            self.download_bar.setValue(100)
+            self.status.setText('✅ Modèle installé. Actualisation de ComfyUI…\n' + str(result))
+            self.connect_engine()
+            return
         if kind == 'models':
             self.checkpoint.addItems(result)
-            self.generate_btn.setEnabled(bool(result) and engine.MODELS[self.catalog.currentIndex()]['direct'])
-            self.status.setText(f'{len(result)} checkpoint(s) trouvé(s). Choisissez celui correspondant à la fiche.' if result else 'Aucun checkpoint : installez un modèle dans ComfyUI/models/checkpoints puis actualisez.')
+            model = engine.MODELS[self.catalog.currentIndex()]
+            wanted = model.get('filename')
+            if wanted:
+                for i in range(self.checkpoint.count()):
+                    if self.checkpoint.itemText(i).endswith(wanted):
+                        self.checkpoint.setCurrentIndex(i)
+                        break
+            self.generate_btn.setEnabled(bool(result) and model['direct'])
+            self.status.setText(f'✅ {len(result)} checkpoint(s) trouvé(s). Le modèle peut maintenant être utilisé.' if result else 'Aucun checkpoint détecté. Installez le modèle avec le bouton au-dessus puis actualisez.')
         else:
             image = QImage.fromData(result)
             if image.isNull():
@@ -174,11 +273,11 @@ class ImageStudioTab(QWidget):
             self.image = image
             self.preview.setPixmap(QPixmap.fromImage(image).scaled(640, 480, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
             self.save_btn.setEnabled(True)
-            self.status.setText('Image créée. Copie conservée dans les sorties ComfyUI ; vous pouvez aussi enregistrer un PNG ici.')
+            self.status.setText('✅ Image créée. Copie conservée dans les sorties ComfyUI ; vous pouvez aussi enregistrer un PNG ici.')
 
     def on_error(self, message):
         self.set_busy(False)
-        self.status.setText('Erreur : ' + message + '\nVérifiez que ComfyUI est lancé et que le checkpoint convient au workflow SDXL.')
+        self.status.setText('Erreur : ' + message + '\nSi ComfyUI est lancé, utilisez « Connecter / actualiser les modèles » puis réessayez.')
 
     def save_image(self):
         path, _ = QFileDialog.getSaveFileName(self, 'Enregistrer l’image', str(Path.home() / 'image_ia.png'), 'Image PNG (*.png)')
