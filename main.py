@@ -49,6 +49,7 @@ from src.ui.v159_extension import install_v159
 from src.ui.v160_extension import install_v160
 from src.ui.v161_extension import install_v161
 from src.ui.v162_extension import install_v162
+from src.ui.v163_extension import install_v163
 
 LOG_FILE = Path.home() / ".ia_manager" / "erreurs.log"
 def handle_exception(exc_type, exc_value, exc_tb):
@@ -76,6 +77,6 @@ def main():
     install_v141(window); install_v142(window); install_v143(window); install_v144(window); install_v145(window); install_v146(window)
     install_v147(window); install_v148(window); install_v149(window); install_v150(window); install_v151(window); install_v152(window)
     install_v153(window); install_v154(window); install_v155(window); install_v156(window); install_v157(window); install_v158(window)
-    install_v159(window); install_v160(window); install_v161(window); install_v162(window)
+    install_v159(window); install_v160(window); install_v161(window); install_v162(window); install_v163(window)
     window.show(); sys.exit(app.exec())
 if __name__=="__main__": main()
