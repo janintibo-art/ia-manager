@@ -42,6 +42,7 @@ from src.ui.v152_extension import install_v152
 from src.ui.v153_extension import install_v153
 from src.ui.v154_extension import install_v154
 from src.ui.v155_extension import install_v155
+from src.ui.v156_extension import install_v156
 
 LOG_FILE = Path.home() / ".ia_manager" / "erreurs.log"
 def handle_exception(exc_type, exc_value, exc_tb):
@@ -56,6 +57,7 @@ def handle_exception(exc_type, exc_value, exc_tb):
         box = QMessageBox(); box.setIcon(QMessageBox.Icon.Warning); box.setWindowTitle("IA Manager - erreur")
         box.setText("Une erreur est survenue, mais l'application continue de fonctionner.\nDétails enregistrés dans : "+str(LOG_FILE))
         box.setDetailedText(text); box.exec()
+
 def main():
     storage.app_models().mkdir(parents=True, exist_ok=True); (Path.home()/".ia_manager"/"config").mkdir(parents=True,exist_ok=True)
     sys.excepthook = handle_exception
@@ -68,6 +70,6 @@ def main():
     install_v135(window); install_v136(window); install_v137(window); install_v138(window); install_v139(window); install_v140(window)
     install_v141(window); install_v142(window); install_v143(window); install_v144(window); install_v145(window); install_v146(window)
     install_v147(window); install_v148(window); install_v149(window); install_v150(window); install_v151(window); install_v152(window)
-    install_v153(window); install_v154(window); install_v155(window)
+    install_v153(window); install_v154(window); install_v155(window); install_v156(window)
     window.show(); sys.exit(app.exec())
 if __name__=="__main__": main()
