@@ -1,0 +1,1 @@
+# IA Manager v155\nCorrige la liste gratuit/local ComfyUI : ouverture dans une fenêtre dédiée, lisible et redimensionnable.\n
