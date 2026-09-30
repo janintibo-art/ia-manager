@@ -21,8 +21,9 @@ MODELS = (
          download_url="https://huggingface.co/cagliostrolab/animagine-xl-4.0/resolve/main/animagine-xl-4.0-opt.safetensors?download=true",
          note="Téléchargement et installation automatiques disponibles. Les descriptions en anglais et les tags sont adaptés à ce modèle."),
     dict(name="FLUX.1 Schnell", specialty="Création texte vers image en peu d'étapes", repo="black-forest-labs/FLUX.1-schnell", direct=False, size=1024, steps=4, cfg=1.0,
-         filename=None, download_url=None,
-         note="Workflow FLUX requis avec ses encodeurs de texte et son VAE. Utiliser un modèle de workflow FLUX dans ComfyUI ; la génération simplifiée de cet onglet ne le prend pas en charge."),
+         filename="flux1-schnell-fp8.safetensors",
+         download_url="https://huggingface.co/Comfy-Org/flux1-schnell/resolve/main/flux1-schnell-fp8.safetensors?download=true",
+         note="Téléchargement automatique de la version FP8 ComfyUI disponible. La génération simplifiée de cet onglet reste désactivée : ouvrez ensuite le workflow FLUX dans ComfyUI."),
 )
 
 
