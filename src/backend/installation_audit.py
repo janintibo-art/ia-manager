@@ -10,8 +10,8 @@ FULL = {
     "deepseek-coder-v2-lite", "qwen25-14b", "mistral-small",
     "sdxl-base", "flux-schnell", "flux-dev", "sd35-medium", "controlnet", "ip-adapter",
     "musicgen-small", "musicgen-melody", "audiogen", "whisper-large-v3", "kokoro", "xtts-v2",
-    "wan21-t2v", "ltx-video",
-    "triposr", "hunyuan3d2",
+    "wan21-t2v", "ltx-video", "cogvideox-2b",
+    "triposr", "hunyuan3d2", "instantmesh",
     "qwen2-vl-7b", "llava", "bge-m3", "nomic-embed",
 }
 
@@ -19,7 +19,7 @@ FULL = {
 # entièrement automatisée de bout en bout.
 PARTIAL = {
     "stable-audio-open",
-    "cogvideox-2b", "instantmesh", "trellis",
+    "trellis",
 }
 
 ROUTE = {
