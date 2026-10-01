@@ -1,4 +1,4 @@
-"""Centre d'installation v170 : audit et installation guidée des prérequis Windows."""
+"""Centre d'installation v173 : audit et installation guidée/automatique des prérequis Windows."""
 from __future__ import annotations
 
 import os
@@ -32,7 +32,6 @@ def winget_path():
 def detection() -> Dict[str, str]:
     local = os.environ.get("LOCALAPPDATA", "")
     program_files = os.environ.get("ProgramFiles", r"C:\Program Files")
-    program_files_x86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
     out = {
         "ollama": _which("ollama", "ollama.exe") or _exists(Path(local)/"Programs"/"Ollama"/"ollama.exe"),
         "git": _which("git", "git.exe") or _exists(Path(program_files)/"Git"/"cmd"/"git.exe"),
@@ -42,15 +41,23 @@ def detection() -> Dict[str, str]:
         "pterm": pinokio_integration.pterm_path() or "",
         "python": _which("python", "python.exe", "py", "py.exe"),
         "blender": _which("blender", "blender.exe"),
+        "pinokio": (
+            _which("pinokio", "Pinokio.exe")
+            or _exists(
+                Path(local)/"Programs"/"pinokio"/"Pinokio.exe",
+                Path(local)/"Programs"/"Pinokio"/"Pinokio.exe",
+                Path(program_files)/"Pinokio"/"Pinokio.exe",
+            )
+        ),
     }
-    # Cherche quelques emplacements Blender courants sans dépendre du registre.
+
     if not out["blender"]:
         base = Path(program_files)/"Blender Foundation"
         if base.is_dir():
             candidates = sorted(base.glob("Blender */blender.exe"), reverse=True)
             if candidates:
                 out["blender"] = str(candidates[0])
-    # ComfyUI installé par IA Manager.
+
     root = str(settings.get("creative_tools_root") or "").strip()
     comfy = ""
     if root:
@@ -61,10 +68,6 @@ def detection() -> Dict[str, str]:
         except Exception:
             pass
     out["comfyui"] = comfy
-    try:
-        out["pinokio_running"] = "oui" if pinokio_integration.local_status().get("running") else ""
-    except Exception:
-        out["pinokio_running"] = ""
     return out
 
 
@@ -85,8 +88,8 @@ COMPONENTS = (
          role="3D, conversion, rig et export", fallback="https://www.blender.org/download/"),
     dict(id="comfyui", name="ComfyUI", kind="internal", package="", detect="comfyui",
          role="Images et workflows vidéo", fallback="https://www.comfy.org/download"),
-    dict(id="pinokio", name="Pinokio", kind="manual", package="", detect="pinokio_running",
-         role="Catalogue d'applications IA locales", fallback="https://pinokio.computer/"),
+    dict(id="pinokio", name="Pinokio", kind="winget", package="pinokiocomputer.pinokio", detect="pinokio",
+         role="Catalogue d'applications IA locales", fallback="https://desktop.pinokio.co/download.html"),
 )
 
 
@@ -107,11 +110,27 @@ def install_command(component_id: str):
         exe = winget_path()
         if not exe:
             raise ValueError("WinGet n'est pas disponible sur ce PC.")
-        return {"program": exe, "args": ["install", "--id", item["package"], "--exact", "--source", "winget",
-                                                "--accept-source-agreements", "--accept-package-agreements"]}
+        return {
+            "program": exe,
+            "args": [
+                "install", "--id", item["package"], "--exact", "--source", "winget",
+                "--accept-source-agreements", "--accept-package-agreements",
+            ],
+        }
     if item["kind"] == "npm":
-        npm = pinokio_integration.npm_path()
+        npm = pinokio_integration.npm_path() or _which("npm", "npm.cmd", "npm.exe")
         if not npm:
             raise ValueError("Node.js/npm doit être installé avant pterm.")
         return {"program": npm, "args": ["install", "-g", item["package"]]}
-    raise ValueError("Ce composant utilise une installation interne ou manuelle.")
+    raise ValueError("Ce composant utilise une installation interne.")
+
+
+def automatic_install_ids() -> List[str]:
+    """Retourne les composants installables automatiquement, dans l'ordre des dépendances."""
+    order = ("git", "gh", "node", "pterm", "python", "ollama", "blender", "pinokio")
+    rows = {row["id"]: row for row in status_rows()}
+    return [item_id for item_id in order if item_id in rows and not rows[item_id]["installed"]]
+
+
+def remaining_internal_ids() -> List[str]:
+    return [row["id"] for row in status_rows() if not row["installed"] and row["kind"] == "internal"]
