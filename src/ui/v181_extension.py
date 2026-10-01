@@ -1,7 +1,7 @@
 """v181 : installation isolée Audio / Voix avancés."""
 from __future__ import annotations
 
-from PyQt6.QtCore import QProcess, QUrl
+from PyQt6.QtCore import QProcess, QProcessEnvironment, QUrl
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -132,6 +132,10 @@ class AudioVoiceInstallTab(QWidget):
         p = QProcess(self)
         self.process = p
         p.setWorkingDirectory(step["cwd"])
+        env = QProcessEnvironment.systemEnvironment()
+        for key, value in step.get("env", {}).items():
+            env.insert(str(key), str(value))
+        p.setProcessEnvironment(env)
         p.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
         p.readyReadStandardOutput.connect(lambda: self.read_output(p))
         p.finished.connect(lambda code, state: self.finished(p, code))

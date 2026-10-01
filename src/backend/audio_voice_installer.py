@@ -237,7 +237,11 @@ marker.write_text(json.dumps({{
 }}, ensure_ascii=False, indent=2), encoding="utf-8")
 print("IA_MANAGER_READY=" + str(path), flush=True)
 """
-    return _cmd("Précharger les poids", p["python"], ["-u", "-c", code], p["base"])
+    cmd = _cmd("Précharger les poids", p["python"], ["-u", "-c", code], p["base"])
+    token = huggingface_token()
+    if token:
+        cmd["env"] = {"HF_TOKEN": token, "HUGGING_FACE_HUB_TOKEN": token}
+    return cmd
 
 
 def diagnostic_command(model_id):
@@ -249,3 +253,43 @@ def diagnostic_command(model_id):
         raise ValueError("Moteur non installé.")
     code = "import sys; print(sys.version); print('Python', sys.executable)"
     return _cmd("Diagnostic Python", p["python"], ["-c", code], p["base"])
+
+
+def huggingface_token():
+    return str(settings.get("huggingface_token") or "").strip()
+
+
+def huggingface_access_status(repo_id: str):
+    """Vérifie l'accès au dépôt sans télécharger les poids."""
+    import requests
+    token = huggingface_token()
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    try:
+        r = requests.get(
+            "https://huggingface.co/api/models/" + str(repo_id),
+            headers=headers,
+            timeout=20,
+        )
+        if r.status_code == 200:
+            data = r.json() if "application/json" in r.headers.get("content-type", "") else {}
+            return {
+                "ok": True,
+                "gated": bool(data.get("gated")),
+                "token": bool(token),
+                "message": "Accès Hugging Face valide.",
+            }
+        if r.status_code in (401, 403):
+            return {
+                "ok": False,
+                "gated": True,
+                "token": bool(token),
+                "message": "Accès refusé : acceptez les conditions du modèle et vérifiez le jeton Hugging Face.",
+            }
+        return {
+            "ok": False,
+            "gated": False,
+            "token": bool(token),
+            "message": "Hugging Face répond avec le code " + str(r.status_code) + ".",
+        }
+    except Exception as exc:
+        return {"ok": False, "gated": False, "token": bool(token), "message": str(exc)}

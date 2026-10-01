@@ -27,6 +27,7 @@ DEFAULTS: Dict[str, Any] = {
     "brave_key": "",
     "searxng_url": "",
     "github_token": "",
+    "huggingface_token": "",
     "civitai_token": "",
     "modelscope_token": "",
     "offline_mode": False,
@@ -58,7 +59,6 @@ def set(key: str, value: Any) -> None:  # noqa: A001 - nom volontairement simple
         data = load()
         data[key] = value
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        # Remplacement atomique : une interruption conserve le précédent JSON.
         fd, name = tempfile.mkstemp(prefix="settings_", suffix=".tmp", dir=CONFIG_DIR)
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as stream:
