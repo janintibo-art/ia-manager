@@ -125,19 +125,34 @@ class InstallationAuditTab(QWidget):
 
         if route == "models":
             self.window.tabs.setCurrentWidget(self.window.models_tab)
-            # Le modèle Studio n'a pas toujours le même identifiant Ollama.
-            # On ouvre donc le catalogue sans forcer une mauvaise sélection.
         elif route == "image":
             self.window.tabs.setCurrentWidget(self.window.image_studio_tab)
+        elif route == "audio_voice":
+            tab = getattr(self.window, "audio_voice_install_tab", None)
+            if tab is not None:
+                self.window.tabs.setCurrentWidget(tab)
+                idx = tab.model.findData(row["id"])
+                if idx >= 0:
+                    tab.model.setCurrentIndex(idx)
+        elif route == "advanced_video3d":
+            tab = getattr(self.window, "advanced_video3d_tab", None)
+            if tab is not None:
+                self.window.tabs.setCurrentWidget(tab)
+                idx = tab.model.findData(row["id"])
+                if idx >= 0:
+                    tab.model.setCurrentIndex(idx)
+        elif route == "final_blockers":
+            tab = getattr(self.window, "final_blockers_tab", None)
+            if tab is not None:
+                self.window.tabs.setCurrentWidget(tab)
         elif route == "media":
             self.window.tabs.setCurrentWidget(self.window.media_studio_tab)
-            # Essaie de sélectionner le modèle exact du catalogue média.
             tab = self.window.media_studio_tab
+            aliases = {"wan21-t2v": "wan21", "hunyuan3d2": "hunyuan3d"}
+            wanted = aliases.get(row["id"], row["id"])
             for i in range(tab.models.count()):
                 data = tab.models.item(i).data(Qt.ItemDataRole.UserRole) or {}
-                if data.get("id") == row["id"] or (
-                    row["id"] == "hunyuan3d2" and data.get("id") == "hunyuan3d"
-                ):
+                if data.get("id") == wanted:
                     tab.models.setCurrentRow(i)
                     break
         else:

@@ -1,4 +1,4 @@
-"""Audit v179 des modèles/outils : niveau d'intégration dans IA Manager."""
+"""Audit v184 des modèles/outils : niveau d'intégration dans IA Manager."""
 from __future__ import annotations
 
 from typing import Dict, List
@@ -28,9 +28,19 @@ ROUTE = {
     "Documents & RAG": "models",
     "Image": "image",
     "Audio & musique": "media",
-    "Voix": "search",
+    "Voix": "audio_voice",
     "Vidéo": "media",
     "3D": "media",
+}
+
+DIRECT_ROUTE = {
+    "stable-audio-open": "final_blockers",
+    "whisper-large-v3": "audio_voice",
+    "kokoro": "audio_voice",
+    "xtts-v2": "audio_voice",
+    "cogvideox-2b": "advanced_video3d",
+    "instantmesh": "advanced_video3d",
+    "trellis": "final_blockers",
 }
 
 
@@ -52,7 +62,7 @@ def rows() -> List[Dict]:
             "category": model["category"],
             "engine": model["engine"],
             "level": lvl,
-            "route": ROUTE.get(model["category"], "search"),
+            "route": DIRECT_ROUTE.get(model["id"], ROUTE.get(model["category"], "search")),
             "url": model.get("url", ""),
         })
     return output
