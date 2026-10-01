@@ -8,7 +8,7 @@ from src.backend import studio_catalog
 FULL = {
     "qwen25-coder-7b", "qwen25-coder-14b", "qwen25-coder-32b",
     "deepseek-coder-v2-lite", "qwen25-14b", "mistral-small",
-    "sdxl-base", "flux-schnell",
+    "sdxl-base", "flux-schnell", "flux-dev", "sd35-medium", "controlnet", "ip-adapter",
     "musicgen-small", "musicgen-melody", "audiogen",
     "wan21-t2v", "ltx-video",
     "triposr", "hunyuan3d2",
@@ -18,7 +18,6 @@ FULL = {
 # Modèles présents dans le catalogue mais dont l'installation n'est pas encore
 # entièrement automatisée de bout en bout.
 PARTIAL = {
-    "flux-dev", "sd35-medium", "controlnet", "ip-adapter",
     "stable-audio-open", "whisper-large-v3", "kokoro", "xtts-v2",
     "cogvideox-2b", "instantmesh", "trellis",
 }
