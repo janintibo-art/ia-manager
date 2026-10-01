@@ -65,6 +65,7 @@ from src.ui.v177_extension import install_v177
 from src.ui.v178_extension import install_v178
 from src.ui.v179_extension import install_v179
 from src.ui.v180_extension import install_v180
+from src.ui.v181_extension import install_v181
 
 LOG_FILE = Path.home() / ".ia_manager" / "erreurs.log"
 def handle_exception(exc_type, exc_value, exc_tb):
@@ -92,6 +93,6 @@ def main():
     install_v141(window); install_v142(window); install_v143(window); install_v144(window); install_v145(window); install_v146(window)
     install_v147(window); install_v148(window); install_v149(window); install_v150(window); install_v151(window); install_v152(window)
     install_v153(window); install_v154(window); install_v155(window); install_v156(window); install_v157(window); install_v158(window)
-    install_v159(window); install_v160(window); install_v161(window); install_v162(window); install_v163(window); install_v164(window); install_v165(window); install_v166(window); install_v167(window); install_v170(window); install_v171(window); install_v172(window); install_v173(window); install_v174(window); install_v175(window); install_v176(window); install_v177(window); install_v178(window); install_v179(window); install_v180(window)
+    install_v159(window); install_v160(window); install_v161(window); install_v162(window); install_v163(window); install_v164(window); install_v165(window); install_v166(window); install_v167(window); install_v170(window); install_v171(window); install_v172(window); install_v173(window); install_v174(window); install_v175(window); install_v176(window); install_v177(window); install_v178(window); install_v179(window); install_v180(window); install_v181(window)
     window.show(); sys.exit(app.exec())
 if __name__=="__main__": main()
