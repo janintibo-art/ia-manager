@@ -87,7 +87,6 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.search_tab, "🔍 Recherche")
         self.tabs.addTab(self.projects_tab, "📁 Projets")
         self.tabs.addTab(self.chat_tab, "💬 Chat")
-        self.tabs.addTab(self.skills_tab, "🧩 Skills")
         self.tabs.addTab(self.comparator_tab, "⚖️ Comparateur")
         self.tabs.addTab(self.dashboard_tab, "📊 Tableau de bord")
         self.tabs.addTab(self.bench_tab, "🏁 Test de vitesse")
@@ -102,6 +101,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.image_studio_tab, "🎨 Création d’images")
         self.tabs.addTab(self.media_studio_tab, "🎵 Audio · Vidéo · 3D")
         self.tabs.addTab(self.creative_tools_tab, "🛠️ Outils locaux")
+        self.tabs.addTab(self.skills_tab, "🧩 Skills")
 
         # Modèles installés ou supprimés : tous les onglets se mettent à jour
         self.setup_tab.models_changed.connect(self.on_models_changed)
