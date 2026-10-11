@@ -919,6 +919,15 @@ conn.apply_preset(0)
 assert conn.c_url.text() == "http://localhost:20128/v1" and conn.c_name.text() == "OmniRoute"
 assert "20128" in conn.custom_status.text()
 conn.new_custom()
+for _label, (_pid, _url, _key) in pv.PRESETS.items():
+    assert _url.startswith(("http://", "https://")) and _pid, _label
+    if _key and _pid != "omniroute":
+        assert pv.PRESET_KEY_HELP.get(_pid), _label
+gem = next(k for k in pv.PRESETS if k.startswith("Google Gemini"))
+conn.preset_combo.setCurrentIndex(conn.preset_combo.findData(gem))
+conn.apply_preset(0)
+assert "aistudio.google.com" in conn.custom_status.text() and conn.c_name.text() == "Google Gemini"
+conn.new_custom()
 print("Préréglage OmniRoute OK")
 
 server.shutdown()

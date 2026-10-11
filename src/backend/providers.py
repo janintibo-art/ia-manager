@@ -48,7 +48,26 @@ PRESETS = {
     "OpenRouter (en ligne, des centaines de modèles)": ("openrouter", "https://openrouter.ai/api/v1", True),
     "Mistral AI (en ligne)": ("mistral", "https://api.mistral.ai/v1", True),
     "Groq (en ligne, très rapide)": ("groq", "https://api.groq.com/openai/v1", True),
+    "Google Gemini (gratuit, AI Studio)": ("gemini", "https://generativelanguage.googleapis.com/v1beta/openai", True),
+    "Cerebras (gratuit, très rapide)": ("cerebras", "https://api.cerebras.ai/v1", True),
+    "NVIDIA NIM (gratuit)": ("nvidia", "https://integrate.api.nvidia.com/v1", True),
+    "Cohere (gratuit, usage léger)": ("cohere", "https://api.cohere.ai/compatibility/v1", True),
+    "Hugging Face (crédit gratuit mensuel)": ("hf", "https://router.huggingface.co/v1", True),
+    "Codestral (gratuit, code)": ("codestral", "https://codestral.mistral.ai/v1", True),
     "Autre serveur compatible OpenAI": ("perso", "http://localhost:8000/v1", False),
+}
+
+# Où obtenir la clé gratuite de chaque service (affiché dans Connexions)
+PRESET_KEY_HELP = {
+    "openrouter": "openrouter.ai/keys — choisissez les modèles dont le nom finit par « :free »",
+    "groq": "console.groq.com/keys",
+    "mistral": "console.mistral.ai (palier gratuit, vérification par téléphone)",
+    "gemini": "aistudio.google.com/apikey",
+    "cerebras": "cloud.cerebras.ai",
+    "nvidia": "build.nvidia.com (vérification par téléphone)",
+    "cohere": "dashboard.cohere.com/api-keys (clé d'essai gratuite)",
+    "hf": "huggingface.co/settings/tokens (droit « Inference Providers »)",
+    "codestral": "console.mistral.ai, section Codestral (vérification par téléphone)",
 }
 
 OPENAI_CHAT_PREFIXES = ("gpt-", "o1", "o3", "o4", "chatgpt-")

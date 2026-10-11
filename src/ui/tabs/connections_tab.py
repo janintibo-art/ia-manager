@@ -538,8 +538,10 @@ class ConnectionsTab(QWidget):
                 "(http://localhost:20128), collez-la ici, puis « Détecter les modèles ». "
                 "Les modèles « auto/… » choisissent seuls le meilleur fournisseur.")
         else:
+            help_url = pv.PRESET_KEY_HELP.get(_pid)
             self.custom_status.setText(
-                "Collez votre clé API, puis « Détecter les modèles »." if needs_key
+                ("Collez votre clé API" + (f" (à créer sur {help_url})" if help_url else "")
+                 + ", puis « Détecter les modèles ».") if needs_key
                 else "Lancez le logiciel et son serveur local, puis « Détecter les modèles ».")
 
     def form_provider(self) -> Dict:
