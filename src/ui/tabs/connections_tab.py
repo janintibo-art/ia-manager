@@ -1,18 +1,17 @@
 """Onglet Connexions - Claude, ChatGPT, serveurs compatibles, ajout manuel de modèles"""
 
 from typing import Dict, List, Optional
-from pathlib import Path
 
 from PyQt6.QtCore import Qt, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
-    QCheckBox, QComboBox, QFileDialog, QFormLayout, QFrame, QHBoxLayout, QLabel, QLineEdit,
+    QComboBox, QFileDialog, QFormLayout, QFrame, QHBoxLayout, QLabel, QLineEdit,
     QListWidget, QListWidgetItem, QMessageBox, QProgressBar, QPushButton, QScrollArea,
     QVBoxLayout, QWidget,
 )
 
 from src.backend import providers as pv
-from src.backend import settings, diagnostics, settings_backup, storage
+from src.backend import settings
 from src.backend.ai_manager import AIManager
 from src.ui import style
 from src.ui.workers import DownloadWorker, FunctionWorker
@@ -161,32 +160,6 @@ class ConnectionsTab(QWidget):
         title.setObjectName("Title")
         root.addWidget(title)
 
-        # Dossiers volumineux : les copies se font hors du thread de l'interface.
-        box, lay = card("💽  Emplacement des modèles et sauvegardes",
-                        "Choisissez un dossier sur D: (ou un autre disque). Copiez vos données existantes "
-                        "avant de changer leur emplacement. Les originaux restent en place.")
-        self.choose_storage_button = QPushButton("📂 Choisir le dossier de stockage…")
-        self.choose_storage_button.setObjectName("Primary")
-        self.choose_storage_button.setToolTip("Parcourir les disques et sélectionner ou créer un dossier.")
-        self.choose_storage_button.clicked.connect(self.browse_storage)
-        lay.addWidget(self.choose_storage_button)
-        self.storage_path = QLineEdit(str(storage.root() or ""))
-        self.storage_path.setReadOnly(True)
-        self.storage_path.setAccessibleName("Dossier de stockage sélectionné")
-        self.storage_path.setPlaceholderText("Aucun dossier choisi — cliquez sur le bouton ci-dessus")
-        self.storage_path.setToolTip("Chemin du dossier choisi dans l’explorateur. Vous pouvez le sélectionner et le copier.")
-        lay.addWidget(self.storage_path)
-        self.move_storage_button = QPushButton("📦 Copier les données et utiliser ce dossier")
-        self.move_storage_button.setObjectName("Primary")
-        self.move_storage_button.clicked.connect(self.move_storage)
-        lay.addWidget(self.move_storage_button)
-        self.storage_status = QLabel("Modèles Ollama : " + str(storage.ollama_models()) +
-                                     "\nProjets : " + str(settings.get("projects_dir")))
-        self.storage_status.setWordWrap(True)
-        self.storage_status.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        lay.addWidget(self.storage_status)
-        root.addWidget(box)
-
         # --- Comptes
         box, lay = card(
             "☁️  Claude et ChatGPT",
@@ -320,10 +293,6 @@ class ConnectionsTab(QWidget):
             "<b>SearXNG</b> donnent des résultats plus fiables, en priorité si renseignées.")
         web_form = QFormLayout()
         web_form.setVerticalSpacing(8)
-        self.offline = QCheckBox("Mode hors ligne : bloquer web et fournisseurs distants")
-        self.offline.setChecked(bool(settings.get("offline_mode")))
-        self.offline.toggled.connect(lambda value: settings.set("offline_mode", value))
-        web_form.addRow(self.offline)
         self.brave_key = QLineEdit(settings.get("brave_key") or "")
         self.brave_key.setEchoMode(QLineEdit.EchoMode.Password)
         self.brave_key.setPlaceholderText("Collez ici votre clé API Brave Search (facultatif)")
@@ -331,18 +300,6 @@ class ConnectionsTab(QWidget):
         self.searxng_url = QLineEdit(settings.get("searxng_url") or "")
         self.searxng_url.setPlaceholderText("http://mon-serveur:8080 (facultatif)")
         web_form.addRow("Adresse SearXNG :", self.searxng_url)
-        self.github_token = QLineEdit(settings.get("github_token") or "")
-        self.github_token.setEchoMode(QLineEdit.EchoMode.Password)
-        self.github_token.setPlaceholderText("Jeton GitHub facultatif (augmente la limite de recherche)")
-        web_form.addRow("Jeton GitHub :", self.github_token)
-        self.civitai_token = QLineEdit(settings.get("civitai_token") or "")
-        self.civitai_token.setEchoMode(QLineEdit.EchoMode.Password)
-        self.civitai_token.setPlaceholderText("Jeton Civitai facultatif pour les fichiers privés")
-        web_form.addRow("Jeton Civitai :", self.civitai_token)
-        self.modelscope_token = QLineEdit(settings.get("modelscope_token") or "")
-        self.modelscope_token.setEchoMode(QLineEdit.EchoMode.Password)
-        self.modelscope_token.setPlaceholderText("Jeton ModelScope facultatif pour dépôts privés")
-        web_form.addRow("Jeton ModelScope :", self.modelscope_token)
         lay.addLayout(web_form)
         web_row = QHBoxLayout()
         brave_key_btn = QPushButton("🔑 Obtenir une clé Brave")
@@ -352,15 +309,6 @@ class ConnectionsTab(QWidget):
         web_save.setObjectName("Primary")
         web_save.clicked.connect(self.save_web_settings)
         web_row.addWidget(web_save)
-        diag = QPushButton("📋 Exporter un diagnostic sans secrets")
-        diag.clicked.connect(self.export_diagnostic)
-        web_row.addWidget(diag)
-        backup = QPushButton("💾 Sauvegarder la configuration")
-        backup.clicked.connect(self.export_backup)
-        web_row.addWidget(backup)
-        restore = QPushButton("📂 Restaurer")
-        restore.clicked.connect(self.import_backup)
-        web_row.addWidget(restore)
         web_row.addStretch()
         lay.addLayout(web_row)
         self.web_status = QLabel()
@@ -371,120 +319,9 @@ class ConnectionsTab(QWidget):
 
         root.addStretch()
 
-    def browse_storage(self):
-        current = self.storage_path.text().strip()
-        initial = Path(current).expanduser() if current else (storage.root() or Path.home())
-        # Un disque retiré ou un ancien chemin ne doit pas bloquer l'explorateur.
-        if not initial.is_dir():
-            initial = Path.home()
-        folder = QFileDialog.getExistingDirectory(
-            self, "Choisir le dossier de stockage", str(initial),
-            QFileDialog.Option.ShowDirsOnly)
-        if folder:
-            self.storage_path.setText(str(Path(folder)))
-            self.storage_path.setToolTip(str(Path(folder)))
-            self.storage_status.setText("Dossier sélectionné : " + str(Path(folder)) +
-                "\nCliquez sur « Copier les données et utiliser ce dossier » pour appliquer ce choix.")
-
-    def move_storage(self):
-        try:
-            destination = storage.validate_root(self.storage_path.text().strip())
-            old_projects = __import__("pathlib").Path(settings.get("projects_dir"))
-            old_models = storage.app_models()
-            old_backups = storage.backups()
-            old_ollama = storage.ollama_models()
-            old_conversions = storage.conversions()
-            plan = [(old_projects, destination / "Projets"),
-                    (old_models, destination / "Modeles" / "Telechargements"),
-                    (old_backups, destination / "Sauvegardes"),
-                    (old_ollama, destination / "Modeles" / "Ollama"),
-                    (old_conversions, destination / "Modeles" / "Conversions")]
-            # Valider tout le plan avant la première copie.
-            for origin, target in plan:
-                if origin.exists() and (origin.resolve() == target.resolve() or
-                                        origin.resolve() in target.resolve().parents or
-                                        target.resolve() in origin.resolve().parents):
-                    if origin.resolve() != target.resolve():
-                        raise ValueError("Le dossier choisi se trouve dans un dossier existant : " + str(origin))
-            if old_ollama.exists() and any(old_ollama.iterdir()) and self.ai_manager.is_ollama_running():
-                raise RuntimeError("Quittez Ollama (icône près de l'horloge), puis recommencez la copie.")
-        except Exception as error:
-            self.storage_status.setText("❌ " + str(error))
-            return
-        self.move_storage_button.setEnabled(False)
-        self.choose_storage_button.setEnabled(False)
-        self.storage_status.setText("⏳ Copie en cours. Vous pouvez continuer à utiliser l'application.")
-        self.storage_worker = FunctionWorker(self._copy_storage, destination, plan)
-        self.storage_worker.done.connect(self.storage_moved)
-        self.storage_worker.start()
-
-    @staticmethod
-    def _copy_storage(destination, plan):
-        count = 0
-        for origin, target in plan:
-            if origin.resolve() != target.resolve():
-                count += storage.copy_folder(origin, target)
-        # Le changement n'est activé qu'une fois toutes les copies terminées.
-        storage.set_ollama_location(destination / "Modeles" / "Ollama")
-        settings.set("projects_dir", str(destination / "Projets"))
-        settings.set("storage_root", str(destination))
-        return count
-
-    def storage_moved(self, ok, result):
-        self.move_storage_button.setEnabled(True)
-        self.choose_storage_button.setEnabled(True)
-        if ok:
-            self.storage_status.setText(f"✅ {result} fichier(s) copiés. Relancez IA Manager et Ollama "
-                                        "pour utiliser les nouveaux dossiers. Les fichiers sur C: sont conservés.")
-        else:
-            self.storage_status.setText("❌ Copie interrompue : " + str(result) +
-                                        "\nLes emplacements précédents sont conservés. Réessayez après correction.")
-
-    def export_diagnostic(self):
-        try:
-            path = diagnostics.export()
-            self.web_status.setText(f"✅ Diagnostic créé sans clés API ni conversations : {path}")
-        except Exception as error:
-            self.web_status.setText(f"❌ Diagnostic impossible : {error}")
-
-    def export_backup(self):
-        path, _ = QFileDialog.getSaveFileName(self, "Sauvegarder la configuration", "ia_manager_config.json",
-                                              "Configuration JSON (*.json)")
-        if not path:
-            return
-        try:
-            settings_backup.export_file(path)
-            self.web_status.setText("✅ Configuration sauvegardée sans clés API. Les clés restent sur cet appareil.")
-        except Exception as error:
-            self.web_status.setText(f"❌ Sauvegarde impossible : {error}")
-
-    def import_backup(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Restaurer une configuration", "",
-                                              "Configuration JSON (*.json)")
-        if not path:
-            return
-        reply = QMessageBox.question(self, "Restaurer la configuration",
-                                     "Les réglages actuels seront remplacés. Continuer ?",
-                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        if reply != QMessageBox.StandardButton.Yes:
-            return
-        try:
-            count = settings_backup.import_file(path)
-            self.offline.setChecked(bool(settings.get("offline_mode")))
-            self.brave_key.clear()
-            self.searxng_url.setText(settings.get("searxng_url") or "")
-            self.refresh_custom_list()
-            self.web_status.setText(f"✅ {count} réglages restaurés. Les clés API existantes ont été conservées.")
-            self.providers_changed.emit()
-        except Exception as error:
-            self.web_status.setText(f"❌ Restauration impossible : {error}")
-
     def save_web_settings(self):
         settings.set("brave_key", self.brave_key.text().strip())
         settings.set("searxng_url", self.searxng_url.text().strip())
-        settings.set("github_token", self.github_token.text().strip())
-        settings.set("civitai_token", self.civitai_token.text().strip())
-        settings.set("modelscope_token", self.modelscope_token.text().strip())
         self.web_status.setText("✅ Enregistré.")
 
     # ------------------------------------------------------ serveurs compatibles
@@ -532,9 +369,15 @@ class ConnectionsTab(QWidget):
         _pid, url, needs_key = pv.PRESETS[label]
         self.c_name.setText(label.split(" (")[0])
         self.c_url.setText(url)
-        self.custom_status.setText(
-            "Collez votre clé API, puis « Détecter les modèles »." if needs_key
-            else "Lancez le logiciel et son serveur local, puis « Détecter les modèles ».")
+        if _pid == "omniroute":
+            self.custom_status.setText(
+                "Lancez OmniRoute (commande « omniroute »), créez une clé API dans son tableau de bord "
+                "(http://localhost:20128), collez-la ici, puis « Détecter les modèles ». "
+                "Les modèles « auto/… » choisissent seuls le meilleur fournisseur.")
+        else:
+            self.custom_status.setText(
+                "Collez votre clé API, puis « Détecter les modèles »." if needs_key
+                else "Lancez le logiciel et son serveur local, puis « Détecter les modèles ».")
 
     def form_provider(self) -> Dict:
         label = self.preset_combo.currentData()
@@ -600,31 +443,13 @@ class ConnectionsTab(QWidget):
 
     def download_hf(self):
         repo = self.hf_repo.text().strip()
-        if repo.lower().startswith("ollama run "):
-            # Le bouton Copier de Hugging Face fournit une commande complète.
-            # Accepter ce collage sans transmettre « ollama run » à l'API Ollama.
-            parts = repo.split()
-            if len(parts) != 3:
-                self.add_status.setText("Collez une seule commande : ollama run hf.co/utilisateur/depot:Q4_K_M")
-                return
-            repo = parts[2]
-        quant = self.hf_quant.text().strip()
-        if ":" in repo.rsplit("/", 1)[-1]:
-            repo, pasted_quant = repo.rsplit(":", 1)
-            quant = pasted_quant
-        if any(c.isspace() for c in repo) or "/" not in repo or not repo.strip("/"):
-            self.add_status.setText("Indiquez utilisateur/depot ou collez la commande Ollama de Hugging Face.")
-            return
-        if not quant or (quant.replace("_", "").isalnum() and len(quant) < 32):
-            self.hf_repo.setText(repo)
-            self.hf_quant.setText(quant)
-        else:
-            self.add_status.setText("Quantification invalide : utilisez par exemple Q4_K_M ou Q6_K.")
+        if "/" not in repo:
+            self.add_status.setText("Indiquez le dépôt sous la forme utilisateur/depot.")
             return
         if not self.ai_manager.is_ollama_running():
             self.add_status.setText("❌ Ollama doit être lancé.")
             return
-        name = pv.hf_model_name(repo, quant)
+        name = pv.hf_model_name(repo, self.hf_quant.text())
         self.set_busy(True, f"⏳ Téléchargement de {name}… (plusieurs minutes possible)")
         self.dl_worker = DownloadWorker(self.ai_manager, name)
         self.dl_worker.finished_ok.connect(lambda ok, err: self.on_added(ok, err, name))
