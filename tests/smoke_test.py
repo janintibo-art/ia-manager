@@ -869,6 +869,49 @@ assert w.tabs.currentWidget() is w.comparator_tab
 assert comp.columns[0].ref() == SSE_REF and comp.columns[1].ref() == SSE_REF
 print("Mémoire documentaire, profils et comparaison d’essai OK")
 
+# ------------------------------------------------------------- Skills et plugins
+from src.backend import skills as skills_lib  # noqa: E402
+
+st = w.skills_tab
+assert w.tabs.indexOf(st) >= 0
+assert st.table.rowCount() == len(skills_lib.all_skills()) >= 60, st.table.rowCount()
+assert "Aucune skill active" in st.summary.text() and "Relecture de code" not in chat.instructions()
+st.plugin_combo.setCurrentIndex(st.plugin_combo.findData("code"))
+assert st.table.rowCount() == 8 and st.plugin_btn.isEnabled()
+st.toggle_plugin()
+assert len(skills_lib.active_skills()) == 8 and "Retirer" in st.plugin_btn.text(), st.plugin_btn.text()
+assert "Relecture de code" in chat.instructions() and "8 skill" in chat.hint.text(), chat.hint.text()
+st.table.item(0, 0).setCheckState(Qt.CheckState.Unchecked)
+assert len(skills_lib.active_skills()) == 7
+st.table.selectRow(1)
+assert st.selected_skill()["builtin"] and not st.save_btn.isEnabled() and st.copy_btn.isEnabled()
+st.copy_to_mine()
+mine = skills_lib.user_skills()
+assert len(mine) == 1 and mine[0]["name"].endswith("(copie)"), mine
+st.new_skill()
+st.name_edit.setText("Ma skill test")
+st.prompt_edit.setPlainText("Réponds toujours en alexandrins.")
+st.save_skill()
+assert len(skills_lib.user_skills()) == 2, st.status.text()
+with tempfile.TemporaryDirectory() as _d:
+    _f = Path(_d) / "importee.md"
+    _f.write_text("---\nname: Importée\ndescription: test\n---\nCorps importé", encoding="utf-8")
+    st.import_paths([str(_f)])
+assert len(skills_lib.user_skills()) == 3, st.status.text()
+st.plugin_combo.setCurrentIndex(st.plugin_combo.findData("__all__"))
+st.search.setText("alexandrins")
+assert st.table.rowCount() == 1
+st.search.clear()
+st.plugin_combo.setCurrentIndex(st.plugin_combo.findData("__active__"))
+assert st.table.rowCount() == 7
+for _s in skills_lib.user_skills():
+    skills_lib.delete_user_skill(_s["id"])
+skills_lib.set_plugin_enabled("code", False)
+st.refresh()
+chat.show_hint()
+assert not skills_lib.active_skills() and "Relecture de code" not in chat.instructions()
+print("Skills et plugins OK")
+
 om_label = "OmniRoute (passerelle IA, sur ce PC)"
 assert pv.PRESETS[om_label] == ("omniroute", "http://localhost:20128/v1", True), pv.PRESETS[om_label]
 conn.preset_combo.setCurrentIndex(conn.preset_combo.findData(om_label))

@@ -20,6 +20,7 @@ from src.backend import code_tools, providers, settings, change_review
 from src.backend import github_tools as gt
 from src.backend import quick_commands as qc
 from src.backend import model_registry as reg
+from src.backend import skills as skills_lib
 from src.backend import web_tools, project_memory, model_options, chat_history
 from src.backend.ai_manager import AIManager
 from src.backend.project_manager import now_iso, slugify
@@ -559,6 +560,7 @@ class ChatTab(QWidget):
             parts.append(self.pm.get_instructions(self.project_id).strip())
         if self.code_mode.isChecked():
             parts.append(code_tools.CODE_MODE_INSTRUCTIONS)
+        parts.append(skills_lib.active_instructions())
         if self.web_ctx:
             parts.append("Tu as accès à ces informations trouvées à l'instant sur internet — "
                          "utilise-les si elles sont utiles, ignore-les sinon :\n\n" + self.web_ctx)
@@ -595,6 +597,9 @@ class ChatTab(QWidget):
                 parts.append(f"📝 Consignes actives : « {first}{'…' if len(instr) > len(first) else ''} »")
             else:
                 parts.append("📝 Ce projet n'a pas encore de consignes (onglet Projets).")
+        n_skills = len(skills_lib.active_skills())
+        if n_skills:
+            parts.append(f"🧩 {n_skills} skill(s) active(s) — à gérer dans l'onglet Skills.")
         if any(a["kind"] == "image" for a in self.pending) and ref and not att.model_accepts_images(ref):
             parts.append("⚠️ Cette IA ne voit probablement pas les images : choisissez un modèle "
                          "« Images » (ex. qwen3-vl, gemma3) ou Claude / GPT.")

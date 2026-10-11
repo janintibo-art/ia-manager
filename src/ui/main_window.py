@@ -25,6 +25,7 @@ from src.ui.tabs.obliteratus_tab import ObliteratusTab
 from src.ui.tabs.projects_tab import ProjectsTab, get_project_manager
 from src.ui.tabs.search_tab import SearchTab
 from src.ui.tabs.setup_tab import SetupTab
+from src.ui.tabs.skills_tab import SkillsTab
 from src.ui.tabs.tasks_tab import TasksTab
 from src.ui.tabs.workspace_tab import WorkspaceTab
 from src.ui.tabs.tutorial_tab import TutorialTab
@@ -62,6 +63,7 @@ class MainWindow(QMainWindow):
         self.github_tab = GithubTab()
         self.dashboard_tab = DashboardTab()
         self.comparator_tab = ComparatorTab()
+        self.skills_tab = SkillsTab()
         self.bench_tab = BenchTab()
         self.obliteratus_tab = ObliteratusTab()
         self.workspace_tab = WorkspaceTab()
@@ -85,6 +87,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.search_tab, "🔍 Recherche")
         self.tabs.addTab(self.projects_tab, "📁 Projets")
         self.tabs.addTab(self.chat_tab, "💬 Chat")
+        self.tabs.addTab(self.skills_tab, "🧩 Skills")
         self.tabs.addTab(self.comparator_tab, "⚖️ Comparateur")
         self.tabs.addTab(self.dashboard_tab, "📊 Tableau de bord")
         self.tabs.addTab(self.bench_tab, "🏁 Test de vitesse")
@@ -113,6 +116,7 @@ class MainWindow(QMainWindow):
         self.setup_tab.analysis_done.connect(self.training_tab.set_system_info)
         self.training_tab.analyze_requested.connect(self.setup_tab.analyze_system)
         self.tabs.currentChanged.connect(self.on_tab_changed)
+        self.skills_tab.skills_changed.connect(self.chat_tab.show_hint)
         self.search_tab.models_changed.connect(self.on_models_changed)
         self.dashboard_tab.models_changed.connect(self.on_models_changed)
         self.setup_tab.show_model.connect(self.open_model)
