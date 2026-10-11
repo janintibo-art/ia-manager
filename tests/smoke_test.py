@@ -18,6 +18,11 @@ except Exception:
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+# Rediriger Path.home() avant le premier import applicatif, sur Windows et Unix.
+_profile = tempfile.TemporaryDirectory(prefix="ia_manager_smoke_profile_")
+os.environ["HOME"] = _profile.name
+os.environ["USERPROFILE"] = _profile.name
+
 errors = []
 
 
@@ -224,6 +229,14 @@ img = QImage(40, 30, QImage.Format.Format_RGB32)
 img.fill(QColor("red"))
 img.save(str(png))
 chat.add_files([str(txt), str(png), str(tmp)])
+attachment_loop = QEventLoop()
+attachment_timer = QTimer()
+attachment_timer.timeout.connect(lambda: attachment_loop.quit() if chat.attachment_worker is None else None)
+attachment_timer.start(20)
+QTimer.singleShot(10000, attachment_loop.quit)
+attachment_loop.exec()
+attachment_timer.stop()
+assert chat.attachment_worker is None, "chargement asynchrone terminé"
 chat.add_qimage(img)
 assert len(chat.pending) == 3, chat.pending
 chat.remove_pending(2)
@@ -831,13 +844,38 @@ settings.set("brave_key", "")
 settings.set("searxng_url", "")
 print("Réglages recherche internet OK")
 
+# ------------------------------------------------------------- Mémoire / profils v24
+from src.backend import project_memory
+workspace = w.workspace_tab
+workspace.refresh_projects()
+profile = {"name": "Profil intégré", "model": SSE_REF, "instructions": "MARQUEUR_PROFIL_V24",
+           "mode": "balanced", "num_ctx": 8192, "temperature": .4, "web": False, "code": False}
+w.apply_work_profile(profile)
+assert chat.profile_label.text() == "Profil : Profil intégré"
+chat.new_conversation_in(pid)
+chat.select_ref(SSE_REF)
+project_memory.add(chat.pm.project_folder(pid), "manuel.txt", "Le synthétiseur violet possède trois oscillateurs. MARQUEUR_DOCUMENT_V24")
+chat.memory_mode.setChecked(True)
+chat.message_input.setPlainText("Combien d’oscillateurs possède le synthétiseur violet ?")
+chat.send_message()
+wait_idle()
+body = _json.dumps(SSE_RECEIVED["last"])
+assert "MARQUEUR_DOCUMENT_V24" in body and "MARQUEUR_PROFIL_V24" in body, body
+assert "manuel.txt" in chat.messages[-1]["content"]
+chat.memory_mode.setChecked(False)
+project_memory.remove(chat.pm.project_folder(pid), project_memory.documents(chat.pm.project_folder(pid))[0]["id"])
+w.compare_trial_models(SSE_REF, SSE_REF)
+assert w.tabs.currentWidget() is w.comparator_tab
+assert comp.columns[0].ref() == SSE_REF and comp.columns[1].ref() == SSE_REF
+print("Mémoire documentaire, profils et comparaison d’essai OK")
+
 om_label = "OmniRoute (passerelle IA, sur ce PC)"
 assert pv.PRESETS[om_label] == ("omniroute", "http://localhost:20128/v1", True), pv.PRESETS[om_label]
 conn.preset_combo.setCurrentIndex(conn.preset_combo.findData(om_label))
 conn.apply_preset(0)
 assert conn.c_url.text() == "http://localhost:20128/v1" and conn.c_name.text() == "OmniRoute"
 assert "20128" in conn.custom_status.text()
-conn.preset_combo.setCurrentIndex(0)
+conn.new_custom()
 print("Préréglage OmniRoute OK")
 
 server.shutdown()
